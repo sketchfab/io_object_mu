@@ -25,7 +25,7 @@ from bpy.props import BoolVectorProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty, IntProperty
 from mathutils import Vector,Matrix,Quaternion
 
-from .mu import MuEnum
+from mu import MuEnum
 
 class MuSpringProp(bpy.types.PropertyGroup):
     spring = FloatProperty(name = "Spring")
@@ -153,6 +153,9 @@ class MuColliderPanel(bpy.types.Panel):
             col.prop(muprops, "suspensionDistance")
 
 def register():
+    bpy.utils.register_class(MuSpringProp)
+    bpy.utils.register_class(MuFrictionProp)
+    bpy.utils.register_class(MuProperties)
     bpy.types.Object.muproperties = PointerProperty(type=MuProperties)
 
 def unregister():

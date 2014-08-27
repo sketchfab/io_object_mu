@@ -27,7 +27,7 @@ from bpy.props import BoolVectorProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty, IntProperty
 from mathutils import Vector,Matrix,Quaternion
 
-from .mu import MuEnum
+from mu import MuEnum
 
 mainTex_block = (
     ("node", "Output", 'ShaderNodeOutput', (630, 730)),
@@ -368,4 +368,6 @@ class MuMaterialPanel(bpy.types.Panel):
             self.drawtex(col, matprops.mainTex)
 
 def register():
+    bpy.utils.register_class(MuTextureProperties)
+    bpy.utils.register_class(MuMaterialProperties)
     bpy.types.Material.mumatprop = PointerProperty(type=MuMaterialProperties)

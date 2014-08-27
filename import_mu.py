@@ -27,10 +27,10 @@ import bpy
 from bpy_extras.object_utils import object_data_add
 from mathutils import Vector,Matrix,Quaternion
 
-from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
-from .mu import MuColliderBox, MuColliderWheel
-from .shader import make_shader
-from . import collider, properties
+from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
+from mu import MuColliderBox, MuColliderWheel
+from shader import make_shader
+import collider, properties
 
 def create_uvs(mu, uvs, mesh, name):
     uvlay = mesh.uv_textures.new(name)
