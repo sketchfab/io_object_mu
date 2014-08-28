@@ -165,6 +165,7 @@ def main():
 
     parser = argparse.ArgumentParser(description=usage_text)
     parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu file")
+    parser.add_argument("-o", "--output", dest="output_file", metavar='FILE|PATH', help="Save blender file")
     # parser.add_argument("-a", "--enable-animation", dest="enable_animation", action="store_const", const=True, default=False, help="Enable saving of animations")
     # parser.add_argument("-m", "--apply-modifiers", dest="apply_modifiers", action="store_const", const=True, default=False, help="Apply modifiers before exporting")
     # parser.add_argument("-j", "--json-materials", dest="json_materials", action="store_const", const=True, default=False, help="Store materials into JSON format")
@@ -173,17 +174,19 @@ def main():
 
     if args.input_file is not None:
         # remove objects from default scene (cube and light)
-        bpy.ops.object.mode_set(mode='OBJECT')
-        bpy.ops.object.select_by_type(type = 'MESH')
-        bpy.ops.object.delete(use_global=False)
-        for mesh in bpy.data.meshes:
-            bpy.data.meshes.remove(mesh)
+        for obj in bpy.context.scene.objects:
+            bpy.context.scene.objects.unlink(obj)
+        for obj in bpy.data.objects:
+            bpy.data.objects.remove(obj)
 
         importer = CommandLineImporter()
         result = importer.execute(bpy.context, args.input_file)
 
         if "FINISHED" not in result:
             sys.exit(1)
+
+    if args.output_file is not None:
+        bpy.ops.wm.save_as_mainfile(filepath=args.output_file)
 
 if __name__ == "__main__":
     register()
