@@ -49,7 +49,11 @@ from bpy.props import BoolProperty, FloatProperty, StringProperty, EnumProperty
 from bpy.props import FloatVectorProperty, PointerProperty
 from bpy_extras.io_utils import ExportHelper, ImportHelper, path_reference_mode, axis_conversion
 
-from . import collider, properties, shader
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+import collider, properties, shader
 
 class ImportMu(bpy.types.Operator, ImportHelper):
     '''Load a KSP Mu (.mu) File'''
@@ -64,7 +68,7 @@ class ImportMu(bpy.types.Operator, ImportHelper):
                                     default=True)
 
     def execute(self, context):
-        from . import import_mu
+        import import_mu
         keywords = self.as_keywords (ignore=("filter_glob",))
         return import_mu.import_mu(self, context, **keywords)
 
@@ -83,7 +87,7 @@ class ExportMu(bpy.types.Operator, ExportHelper):
                      or type(context.active_object.data) == bpy.types.Mesh))
 
     def execute(self, context):
-        from . import export_mu
+        import export_mu
         keywords = self.as_keywords (ignore=("check_existing", "filter_glob"))
         return export_mu.export_mu(self, context, **keywords)
 
@@ -129,6 +133,7 @@ def register():
     bpy.types.INFO_MT_add.append(collider.menu_func)
     shader.register()
 
+
 def unregister():
     bpy.utils.unregister_module(__name__)
 
@@ -137,5 +142,52 @@ def unregister():
     properties.unregister()
     bpy.types.INFO_MT_add.remove(collider.menu_func)
 
+
+class CommandLineImporter():
+    def execute(self, context, filepath):
+        import import_mu
+        return import_mu.import_mu(self, context, filepath, False)
+
+    def report(self, type, message):
+        print("[{}] {}".format(','.join(type), message))
+
+
+def main():
+    import sys
+    import argparse
+
+    # parse command line arguments
+    argv = sys.argv
+    argv = [] if "--" not in argv else argv[argv.index("--") + 1:]
+
+    usage_text = """Run blender in background mode with this script:
+    blender --background --python " + __file__ + " -- [options]"""
+
+    parser = argparse.ArgumentParser(description=usage_text)
+    parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu file")
+    parser.add_argument("-o", "--output", dest="output_file", metavar='FILE|PATH', help="Save blender file")
+    # parser.add_argument("-a", "--enable-animation", dest="enable_animation", action="store_const", const=True, default=False, help="Enable saving of animations")
+    # parser.add_argument("-m", "--apply-modifiers", dest="apply_modifiers", action="store_const", const=True, default=False, help="Apply modifiers before exporting")
+    # parser.add_argument("-j", "--json-materials", dest="json_materials", action="store_const", const=True, default=False, help="Store materials into JSON format")
+
+    args = parser.parse_args(argv)
+
+    if args.input_file is not None:
+        # remove objects from default scene (cube and light)
+        for obj in bpy.context.scene.objects:
+            bpy.context.scene.objects.unlink(obj)
+        for obj in bpy.data.objects:
+            bpy.data.objects.remove(obj)
+
+        importer = CommandLineImporter()
+        result = importer.execute(bpy.context, args.input_file)
+
+        if "FINISHED" not in result:
+            sys.exit(1)
+
+    if args.output_file is not None:
+        bpy.ops.wm.save_as_mainfile(filepath=args.output_file)
+
 if __name__ == "__main__":
     register()
+    main()

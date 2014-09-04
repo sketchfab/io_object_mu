@@ -27,10 +27,10 @@ import bpy
 from bpy_extras.object_utils import object_data_add
 from mathutils import Vector,Matrix,Quaternion
 
-from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
-from .mu import MuColliderBox, MuColliderWheel
-from .shader import make_shader
-from . import collider, properties
+from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
+from mu import MuColliderBox, MuColliderWheel
+from shader import make_shader
+import collider, properties
 
 def create_uvs(mu, uvs, mesh, name):
     uvlay = mesh.uv_textures.new(name)
@@ -217,7 +217,7 @@ def create_object(mu, muobj, parent, create_colliders, parents):
     if hasattr(muobj, "tag_and_layer"):
         obj.muproperties.tag = muobj.tag_and_layer.tag
         obj.muproperties.layer = muobj.tag_and_layer.layer
-    if hasattr(muobj, "collider"):
+    if hasattr(muobj, "collider") and create_colliders:
         cobj = create_collider(mu, muobj)
         cobj.parent = obj
     obj.parent = parent

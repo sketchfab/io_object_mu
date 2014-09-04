@@ -26,8 +26,8 @@ from bpy.props import BoolVectorProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty, IntProperty
 from mathutils import Vector,Matrix,Quaternion
 
-from .mu import MuEnum
-from . import properties
+from mu import MuEnum
+import properties
 
 collider_sphere_ve = (
     [(-1.000, 0.000, 0.000), (-0.866, 0.000, 0.500), (-0.500, 0.000, 0.866),

@@ -24,12 +24,12 @@ from bpy_extras.object_utils import object_data_add
 from mathutils import Vector,Matrix,Quaternion
 from pprint import pprint
 
-from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
-from .mu import MuObject, MuTransform, MuMesh, MuTagLayer, MuRenderer
-from .mu import MuColliderBox, MuColliderWheel, MuMaterial, MuTexture, MuMatTex
-from .mu import MuSpring, MuFriction
-from .shader import make_shader
-from . import properties
+from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
+from mu import MuObject, MuTransform, MuMesh, MuTagLayer, MuRenderer
+from mu import MuColliderBox, MuColliderWheel, MuMaterial, MuTexture, MuMatTex
+from mu import MuSpring, MuFriction
+from shader import make_shader
+import properties
 
 def strip_nnn(name):
     ind = name.rfind(".")
