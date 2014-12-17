@@ -144,9 +144,9 @@ def unregister():
 
 
 class CommandLineImporter():
-    def execute(self, context, filepath):
+    def execute(self, context, filepath, colliders):
         import import_mu
-        return import_mu.import_mu(self, context, filepath, False)
+        return import_mu.import_mu(self, context, filepath, colliders)
 
     def report(self, type, message):
         print("[{}] {}".format(','.join(type), message))
@@ -166,6 +166,7 @@ def main():
     parser = argparse.ArgumentParser(description=usage_text)
     parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu file")
     parser.add_argument("-o", "--output", dest="output_file", metavar='FILE|PATH', help="Save blender file")
+    parser.add_argument("-c", "--colliders", dest="colliders", default=False, action='store_true', help="Create colliders")
     # parser.add_argument("-a", "--enable-animation", dest="enable_animation", action="store_const", const=True, default=False, help="Enable saving of animations")
     # parser.add_argument("-m", "--apply-modifiers", dest="apply_modifiers", action="store_const", const=True, default=False, help="Apply modifiers before exporting")
     # parser.add_argument("-j", "--json-materials", dest="json_materials", action="store_const", const=True, default=False, help="Store materials into JSON format")
@@ -180,7 +181,7 @@ def main():
             bpy.data.objects.remove(obj)
 
         importer = CommandLineImporter()
-        result = importer.execute(bpy.context, args.input_file)
+        result = importer.execute(bpy.context, args.input_file, args.colliders)
 
         if "FINISHED" not in result:
             sys.exit(1)
