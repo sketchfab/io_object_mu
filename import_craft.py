@@ -322,4 +322,32 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     if VERBOSE:
         print_blender_data_stats('generated')
 
+
+    # We need to set a hemisphere light to lit correclty the model
+    # in the Sketchfab viewer
+
+    # Get the scene lights
+    lights = []
+    for ob in bpy.context.scene.objects:
+        if ob.type == 'LAMP':
+            lights.append(ob)
+
+    unselect_all_objects()
+    # Select and delete all excedent lights (keeping only 0 and 1)
+    for idx in range(2, len(lights)):
+        lights[idx].select = True
+    bpy.ops.object.delete()
+
+    # Create hemisphere light
+    lamp_data = bpy.data.lamps.new(name="Hemi", type = 'HEMI')
+    lamp_object = bpy.data.objects.new(name="Hemi", object_data=lamp_data)
+    bpy.context.scene.objects.link(lamp_object)
+    lamp_object.location = (5.0, 5.0, 5.0)
+    lamp_object.rotation_mode = 'XYZ'
+    # Need to set a rotation offset to avoid shadowing issues (vertical directional light)
+    lamp_object.rotation_euler[1] = 0.2
+    lamp_object.select = True
+    bpy.context.scene.objects.active = lamp_object
+
+
     return result
