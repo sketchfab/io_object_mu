@@ -121,10 +121,10 @@ def make_material(mumat, mutextures):
         set_spec(True)
     elif shader == 'KSP/Alpha/Unlit Transparent':
         set_diff(True)
-        mat.emmit = 1
+      #  mat.emmit = 1
     elif shader == 'KSP/Unlit':
         set_diff(False)
-        mat.emmit = 1
+       # mat.emmit = 1
     elif shader == 'KSP/Diffuse':
         set_diff(False)
 
