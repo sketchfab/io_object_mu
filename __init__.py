@@ -54,6 +54,7 @@ import os
 
 sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 import collider, properties, shader
+import import_craft
 
 class ImportMu(bpy.types.Operator, ImportHelper):
     '''Load a KSP Mu (.mu) File'''
@@ -131,7 +132,6 @@ def register():
 
     properties.register()
     bpy.types.INFO_MT_add.append(collider.menu_func)
-    shader.register()
 
 
 def unregister():
@@ -151,6 +151,10 @@ class CommandLineImporter():
     def report(self, type, message):
         print("[{}] {}".format(','.join(type), message))
 
+class CommandLineCraftImporter():
+    def execute(self, context, filepath, colliders, allow_no_material_mesh):
+        return import_craft.import_craft(context, filepath, colliders, allow_no_material_mesh)
+
 
 def main():
     import sys
@@ -164,9 +168,10 @@ def main():
     blender --background --python " + __file__ + " -- [options]"""
 
     parser = argparse.ArgumentParser(description=usage_text)
-    parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu file")
+    parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu/.craft file")
     parser.add_argument("-o", "--output", dest="output_file", metavar='FILE|PATH', help="Save blender file")
     parser.add_argument("-c", "--colliders", dest="colliders", default=False, action='store_true', help="Create colliders")
+    parser.add_argument("-n", "--allow-nomat", dest="allow_no_material_mesh", action='store_true', default=False)
     # parser.add_argument("-a", "--enable-animation", dest="enable_animation", action="store_const", const=True, default=False, help="Enable saving of animations")
     # parser.add_argument("-m", "--apply-modifiers", dest="apply_modifiers", action="store_const", const=True, default=False, help="Apply modifiers before exporting")
     # parser.add_argument("-j", "--json-materials", dest="json_materials", action="store_const", const=True, default=False, help="Store materials into JSON format")
@@ -180,8 +185,14 @@ def main():
         for obj in bpy.data.objects:
             bpy.data.objects.remove(obj)
 
-        importer = CommandLineImporter()
-        result = importer.execute(bpy.context, args.input_file, args.colliders)
+        # Check the file extension
+        extension = args.input_file.split('.')[-1]
+        if extension == 'craft':
+            importer = CommandLineCraftImporter()
+            result = importer.execute(bpy.context, args.input_file, args.colliders, args.allow_no_material_mesh)
+        else:
+            importer = CommandLineImporter()
+            result = importer.execute(bpy.context, args.input_file, args.colliders)
 
         if "FINISHED" not in result:
             sys.exit(1)

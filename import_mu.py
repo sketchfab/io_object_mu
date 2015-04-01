@@ -29,7 +29,7 @@ from mathutils import Vector,Matrix,Quaternion
 
 from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
 from mu import MuColliderBox, MuColliderWheel
-from shader import make_shader
+from shader import make_material
 import collider, properties
 
 def create_uvs(mu, uvs, mesh, name):
@@ -320,7 +320,7 @@ def add_texture(mu, mat, mattex):
 def create_materials(mu):
     #material info is in the top level object
     for mumat in mu.materials:
-        mumat.material = make_shader(mumat, mu)
+        mumat.material = make_material(mumat, mu.textures)
 
 def import_mu(self, context, filepath, create_colliders):
     operator = self

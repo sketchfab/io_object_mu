@@ -19,279 +19,117 @@
 
 # <pep8 compliant>
 
-from struct import unpack
-
 import bpy
-from bpy.props import BoolProperty, FloatProperty, StringProperty, EnumProperty
-from bpy.props import BoolVectorProperty, CollectionProperty, PointerProperty
-from bpy.props import FloatVectorProperty, IntProperty
-from mathutils import Vector,Matrix,Quaternion
-
+import functools
 from mu import MuEnum
 
-mainTex_block = (
-    ("node", "Output", 'ShaderNodeOutput', (630, 730)),
-    ("node", "mainMaterial", 'ShaderNodeMaterial', (70, 680)),
-    ("node", "geometry", 'ShaderNodeGeometry', (-590, 260)),
-    ("node", "mainTex", 'ShaderNodeTexture', (-380, 480)),
-    ("link", "geometry", "UV", "mainTex", "Vector"),
-    ("link", "mainTex", "Color", "mainMaterial", "Color"),
-    ("settex", "mainTex", "texture", "mainTex"),
-    ("link", "mainMaterial", "Color", "Output", "Color"),
-)
 
-specular_block = (
-    ("node", "specColor", 'ShaderNodeValToRGB', (-210, 410)),
-    ("link", "mainTex", "Value", "specColor", "Fac"),
-    ("link", "specColor", "Color", "mainMaterial", "Spec"),
-    ("set", "specColor", "color_ramp.elements[1].color", "specColor"),
-    #FIXME shinines
-)
+def create_texture_slot(mat, texture, use_alpha):
+    ''' Create the slot and set the texture '''
+    if texture.name not in bpy.data.textures:
+        print("Warning : the texture {} doesn't exist".format(texture.name))
+        return None
+    slot = mat.texture_slots.add()
+    slot.texture = bpy.data.textures[texture.name]
+    slot.texture_coords = 'UV'
+    slot.texture.image.use_alpha = use_alpha
 
-bumpmap_block = (
-    ("node", "bumpMap", 'ShaderNodeMaterial', (-380, 480)),
-    ("link", "bumpMap", "Normal", "mainMaterial", "Normal"),
-    ("call", "bumpMap", "material.texture_slots.add()"),
-    ("settex", "bumpMap", "material.texture_slots[0].texture", "bumpMap"),
-    ("setval", "bumpMap", "material.texture_slots[0].texture_coords", 'UV'),
-    ("setval", "bumpMap", "material.texture_slots[0].use_map_color_diffuse", False),
-    ("setval", "bumpMap", "material.texture_slots[0].use_map_normal", True),
-)
+    return slot
 
-emissive_block = (
-    ("node", "emissive", 'ShaderNodeTexture', (-400, 40)),
-    ("node", "emissiveConvert", 'ShaderNodeRGBToBW', (-230, 30)),
-    ("node", "emissiveColor", 'ShaderNodeValToRGB', (-50, 180)),
-    ("node", "emissiveMaterial", 'ShaderNodeMaterial', (230, 400)),
-    ("link", "geometry", "UV", "emissive", "Vector"),
-    ("link", "emissive", "Color", "emissiveConvert", "Color"),
-    ("link", "emissiveConvert", "Val", "emissiveColor", "Fac"),
-    ("link", "emissiveColor", "Color", "emissiveMaterial", "Color"),
-    ("settex", "emissive", "texture", "emissive"),
-    ("set", "emissiveColor", "color_ramp.elements[1].color", "emissiveColor"),
-    ("setval", "emissiveMaterial", "use_specular", False),
-    ("setval", "emissiveMaterial", "material.emit", 1.0),
-    ("node", "mix", 'ShaderNodeMixRGB', (430, 610)),
-    ("link", "mainMaterial", "Color", "mix", "Color1"),
-    ("link", "emissiveMaterial", "Color", "mix", "Color2"),
-    ("link", "mix", "Color", "Output", "Color"),
-    ("setval", "mix", "blend_type", 'ADD'),
-    ("setval", "mix", "inputs['Fac'].default_value", 1.0),
-)
 
-alpha_cutoff_block = (
-    ("node", "alphaCutoff", 'ShaderNodeMath', (-230, 30)),
-    ("link", "mainTex", "Value", "alphaCutoff", 0),
-    ("link", "alphaCutoff", "Value", "Output", "Alpha"),
-    ("set", "alphaCutoff", "inputs[1].default_value", "cutoff"),
-)
+def set_diffuse(mumat, mat, textures, use_alpha):
+    ''' Set diffuse channel '''
+    slot = create_texture_slot(mat, textures[mumat.mainTex.index], use_alpha)
+    if slot:
+        slot.use_map_color_diffuse = True
+        slot.diffuse_color_factor = 1
+        mat.diffuse_intensity = 1
+        if use_alpha:
+            mat.use_transparency = True
+            mat.transparency_method = 'Z_TRANSPARENCY'
+            slot.use_map_alpha = True
+            slot.alpha_factor = 1
+            slot.blend_type = 'MULTIPLY'
 
-ksp_specular = mainTex_block + specular_block
-ksp_bumped = mainTex_block + bumpmap_block
-ksp_bumped_specular = mainTex_block + specular_block + bumpmap_block
-ksp_emissive_diffuse = mainTex_block + emissive_block
-ksp_emissive_specular = mainTex_block + emissive_block + specular_block
-ksp_emissive_bumped_specular = (mainTex_block + emissive_block
-                                + specular_block + bumpmap_block)
-ksp_alpha_cutoff = mainTex_block + alpha_cutoff_block
-ksp_alpha_cutoff_bumped = mainTex_block + alpha_cutoff_block + bumpmap_block
-ksp_alpha_translucent = ()
-ksp_alpha_translucent_specular = ()
-ksp_unlit_transparent = ()
-ksp_unlit = ()
-ksp_diffuse = mainTex_block
 
-ksp_shaders = {
-"KSP/Specular":ksp_specular,
-"KSP/Bumped":ksp_bumped,
-"KSP/Bumped Specular":ksp_bumped_specular,
-"KSP/Emissive/Diffuse":ksp_emissive_diffuse,
-"KSP/Emissive/Specular":ksp_emissive_specular,
-"KSP/Emissive/Bumped Specular":ksp_emissive_bumped_specular,
-"KSP/Alpha/Cutoff":ksp_alpha_cutoff,
-"KSP/Alpha/Cutoff Bumped":ksp_alpha_cutoff_bumped,
-"KSP/Alpha/Translucent":ksp_alpha_translucent,
-"KSP/Alpha/Translucent Specular":ksp_alpha_translucent_specular,
-"KSP/Alpha/Unlit Transparent":ksp_unlit_transparent,
-"KSP/Unlit":ksp_unlit,
-"KSP/Diffuse":ksp_diffuse,
-}
+def set_specular(mumat, mat, textures, use_alpha):
+    ''' Set KSP specular conversion channel '''
+    slot = create_texture_slot(mat, textures[mumat.mainTex.index], True)
+    if slot:
+        mat.specular_color = mumat.specColor[0:-1]
+        mat.specular_hardness = mumat.shininess
+        mat.specular_intensity = 0
 
-shader_items=(
-    ('', "", ""),
-    ('KSP/Specular', "KSP/Specular", ""),
-    ('KSP/Bumped', "KSP/Bumped", ""),
-    ('KSP/Bumped Specular', "KSP/Bumped Specular", ""),
-    ('KSP/Emissive/Diffuse', "KSP/Emissive/Diffuse", ""),
-    ('KSP/Emissive/Specular', "KSP/Emissive/Specular", ""),
-    ('KSP/Emissive/Bumped Specular', "KSP/Emissive/Bumped Specular", ""),
-    ('KSP/Alpha/Cutoff', "KSP/Alpha/Cutoff", ""),
-    ('KSP/Alpha/Cutoff Bumped', "KSP/Alpha/Cutoff Bumped", ""),
-    ('KSP/Alpha/Translucent', "KSP/Alpha/Translucent", ""),
-    ('KSP/Alpha/Translucent Specular', "KSP/Alpha/Translucent Specular", ""),
-    ('KSP/Alpha/Unlit Transparent', "KSP/Alpha/Unlit Transparent", ""),
-    ('KSP/Unlit', "KSP/Unlit", ""),
-    ('KSP/Diffuse', "KSP/Diffuse", ""),
-)
+        slot = create_texture_slot(mat, textures[mumat.mainTex.index], True)
+        slot.use_map_hardness = 1
+        slot.texture.use_alpha = use_alpha
+        slot.texture.image.use_alpha = False
 
-def node_node(name, nodes, s):
-    n = nodes.new(s[2])
-    n.name = "%s.%s" % (name, s[1])
-    n.label = s[1]
-    n.location = s[3]
-    if s[2] == "ShaderNodeMaterial":
-        n.material = bpy.data.materials.new(n.name)
 
-def node_link(name, nodes, links, s):
-    n1 = nodes["%s.%s" % (name, s[1])]
-    n2 = nodes["%s.%s" % (name, s[3])]
-    links.new(n1.outputs[s[2]], n2.inputs[s[4]])
+def set_emissive(mumat, mat, textures):
+    ''' Set KSP emissive channel '''
+    slot = create_texture_slot(mat, textures[mumat.emissive.index], True)
+    if slot:
+        slot.use_map_emission = True
+        slot.use_map_color_diffuse = False
+        mat.diffuse_intensity = 0
 
-def node_set(name, matprops, nodes, s):
-    n = nodes["%s.%s" % (name, s[1])]
-    exec ("n.%s = matprops.%s" % (s[2], s[3]), {}, locals())
 
-def node_settex(name, matprops, nodes, s):
-    n = nodes["%s.%s" % (name, s[1])]
-    tex = getattr(matprops,s[3])
-    if tex.tex in bpy.data.textures:
-        tex = bpy.data.textures[tex.tex]
-        exec ("n.%s = tex" % s[2], {}, locals())
+def set_bump(mumat, mat, textures):
+    ''' Set bump channel '''
+    slot = create_texture_slot(mat, textures[mumat.bumpMap.index], False)
+    if slot:
+        slot.use_map_normal = True
+        slot.use_map_color_diffuse = False
+        slot.texture.use_alpha = False
+        slot.normal_factor = 0.3
 
-def node_setval(name, nodes, s):
-    n = nodes["%s.%s" % (name, s[1])]
-    exec ("n.%s = %s" % (s[2], repr(s[3])), {}, locals())
 
-def node_call(name, nodes, s):
-    n = nodes["%s.%s" % (name, s[1])]
-    exec ("n.%s" % s[2], {}, locals())
-
-def create_nodes(mat):
-    mat.use_nodes = True
-    nodes = mat.node_tree.nodes
-    links = mat.node_tree.links
-    while len(links):
-        links.remove(links[0])
-    while len(nodes):
-        nodes.remove(nodes[0])
-    shader = ksp_shaders[mat.mumatprop.shader]
-    for s in shader:
-        if s[0] == "node":
-            node_node(mat.name, nodes, s)
-        elif s[0] == "link":
-            node_link(mat.name, nodes, links, s)
-        elif s[0] == "set":
-            node_set(mat.name, mat.mumatprop, nodes, s)
-        elif s[0] == "settex":
-            node_settex(mat.name, mat.mumatprop, nodes, s)
-        elif s[0] == "setval":
-            node_setval(mat.name, nodes, s)
-        elif s[0] == "call":
-            node_call(mat.name, nodes, s)
-
-def set_tex(mu, dst, src):
-    try:
-        dst.tex = mu.textures[src.index].name
-    except IndexError:
-        pass
-    dst.scale = src.scale
-    dst.offset = src.offset
-
-def make_shader(mumat, mu):
+def make_material(mumat, mutextures):
     mat = bpy.data.materials.new(mumat.name)
-    matprops = mat.mumatprop
-    id = MuEnum.ShaderNames[mumat.type]
-    matprops.shader = id
-    if matprops.shader == 'KSP/Specular':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.specColor = mumat.specColor
-        matprops.shininess = mumat.shininess
-    elif matprops.shader == 'KSP/Bumped':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        set_tex(mu, matprops.bumpMap, mumat.bumpMap)
-    elif matprops.shader == 'KSP/Bumped Specular':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        set_tex(mu, matprops.bumpMap, mumat.bumpMap)
-        matprops.specColor = mumat.specColor
-        matprops.shininess = mumat.shininess
-    elif matprops.shader == 'KSP/Emissive/Diffuse':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        set_tex(mu, matprops.emissive, mumat.emissive)
-        matprops.emissiveColor = mumat.emissiveColor
-    elif matprops.shader == 'KSP/Emissive/Specular':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.specColor = mumat.specColor
-        matprops.shininess = mumat.shininess
-        set_tex(mu, matprops.emissive, mumat.emissive)
-        matprops.emissiveColor = mumat.emissiveColor
-    elif matprops.shader == 'KSP/Emissive/Bumped Specular':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        set_tex(mu, matprops.bumpMap, mumat.bumpMap)
-        matprops.specColor = mumat.specColor
-        matprops.shininess = mumat.shininess
-        set_tex(mu, matprops.emissive, mumat.emissive)
-        matprops.emissiveColor = mumat.emissiveColor
-    elif matprops.shader == 'KSP/Alpha/Cutoff':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.cutoff = mumat.cutoff
-    elif matprops.shader == 'KSP/Alpha/Cutoff Bumped':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        set_tex(mu, matprops.bumpMap, mumat.bumpMap)
-        matprops.cutoff = mumat.cutoff
-    elif matprops.shader == 'KSP/Alpha/Translucent':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-    elif matprops.shader == 'KSP/Alpha/Translucent Specular':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.gloss = mumat.gloss
-        matprops.specColor = mumat.specColor
-        matprops.shininess = mumat.shininess
-    elif matprops.shader == 'KSP/Alpha/Unlit Transparent':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.color = mumat.color
-    elif matprops.shader == 'KSP/Unlit':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-        matprops.color = mumat.color
-    elif matprops.shader == 'KSP/Diffuse':
-        set_tex(mu, matprops.mainTex, mumat.mainTex)
-    create_nodes(mat)
+    shader = MuEnum.ShaderNames[mumat.type]
+
+    set_diff = functools.partial(set_diffuse, mumat, mat, mutextures)
+    set_spec = functools.partial(set_specular, mumat, mat, mutextures)
+
+    if shader == 'KSP/Specular':
+        set_spec(False)
+    elif shader == 'KSP/Bumped':
+        set_diff(False)
+        set_bump(mumat, mat, mutextures)
+    elif shader == 'KSP/Bumped Specular':
+        set_spec(False)
+        set_bump(mumat, mat, mutextures)
+    elif shader == 'KSP/Emissive/Diffuse':
+        set_diff(False)
+        set_emissive(mumat, mat, mutextures)
+    elif shader == 'KSP/Emissive/Specular':
+        set_spec(False)
+        set_emissive(mumat, mat, mutextures)
+    elif shader == 'KSP/Emissive/Bumped Specular':
+        set_spec(False)
+        set_emissive(mumat, mat, mutextures)
+        set_bump(mumat, mat, mutextures)
+    elif shader == 'KSP/Alpha/Cutoff':
+        set_diff(True)
+    elif shader == 'KSP/Alpha/Cutoff Bumped':
+        set_diff(True)
+        set_bump(mumat, mat, mutextures)
+    elif shader == 'KSP/Alpha/Translucent':
+        set_diff(True)
+    elif shader == 'KSP/Alpha/Translucent Specular':
+        set_spec(True)
+    elif shader == 'KSP/Alpha/Unlit Transparent':
+        set_diff(True)
+      #  mat.emmit = 1
+    elif shader == 'KSP/Unlit':
+        set_diff(False)
+       # mat.emmit = 1
+    elif shader == 'KSP/Diffuse':
+        set_diff(False)
+
     return mat
 
-def shader_update(prop):
-    def updater(self, context):
-        if not hasattr(context, "material"):
-            return
-        mat = context.material
-        if type(self) == MuTextureProperties:
-            pass
-        elif type(self) == MuMaterialProperties:
-            if (prop) == "shader":
-                create_nodes(mat)
-            else:
-                shader = ksp_shaders[mat.mumatprop.shader]
-                nodes = mat.node_tree.nodes
-                for s in shader:
-                    if s[0] == "set" and s[3] == prop:
-                        node_set(mat.name, mat.mumatprop, nodes, s)
-                    elif s[0] == "settex" and s[3] == prop:
-                        node_settex(mat.name, mat.mumatprop, nodes, s)
-    return updater
-
-class MuTextureProperties(bpy.types.PropertyGroup):
-    tex = StringProperty(name="tex", update=shader_update("tex"))
-    scale = FloatVectorProperty(name="scale", size = 2, subtype='XYZ', default = (1.0, 1.0), update=shader_update("scale"))
-    offset = FloatVectorProperty(name="offset", size = 2, subtype='XYZ', default = (0.0, 0.0), update=shader_update("offset"))
-
-class MuMaterialProperties(bpy.types.PropertyGroup):
-    shader = EnumProperty(items = shader_items, name = "Shader", update=shader_update("shader"))
-    mainTex = PointerProperty(type=MuTextureProperties, name = "mainTex")
-    specColor = FloatVectorProperty(name="specColor", size = 4, subtype='COLOR', min = 0.0, max = 1.0, default = (1.0, 1.0, 1.0, 1.0), update=shader_update("specColor"))
-    shininess = FloatProperty(name="shininess", update=shader_update("shininess"))
-    bumpMap = PointerProperty(type=MuTextureProperties, name = "bumpMap")
-    emissive = PointerProperty(type=MuTextureProperties, name = "emissive")
-    emissiveColor = FloatVectorProperty(name="emissiveColor", size = 4, subtype='COLOR', min = 0.0, max = 1.0, default = (1.0, 1.0, 1.0, 1.0), update=shader_update("emissiveColor"))
-    cutoff = FloatProperty(name="cutoff", min=0, max=1, update=shader_update("cutoff"))
-    gloss = FloatProperty(name="gloss", update=shader_update("gloss"))
-    color = FloatVectorProperty(name="color", size = 4, subtype='COLOR', min = 0.0, max = 1.0, default = (1.0, 1.0, 1.0, 1.0), update=shader_update("color"))
 
 class MuMaterialPanel(bpy.types.Panel):
     bl_space_type = 'PROPERTIES'
@@ -301,7 +139,7 @@ class MuMaterialPanel(bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        return context.material != None
+        return context.material is not None
 
     def drawtex(self, layout, texprop):
         box = layout.box()
@@ -366,8 +204,3 @@ class MuMaterialPanel(bpy.types.Panel):
             col.prop(matprops, "color")
         elif matprops.shader == 'KSP/Diffuse':
             self.drawtex(col, matprops.mainTex)
-
-def register():
-    bpy.utils.register_class(MuTextureProperties)
-    bpy.utils.register_class(MuMaterialProperties)
-    bpy.types.Material.mumatprop = PointerProperty(type=MuMaterialProperties)
