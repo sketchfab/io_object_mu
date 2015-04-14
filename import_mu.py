@@ -277,7 +277,20 @@ def load_mbm(mbmpath):
 
 def load_image(name, path):
     if name[-4:].lower() in [".png", ".tga"]:
-        bpy.data.images.load(os.path.join(path, name))
+        img_path = os.path.join(path, name)
+        if any(name == os.path.basename(packed_img.filepath) \
+               for packed_img in bpy.data.images):
+            # Add the directory name between the file name and the extension
+            basename, ext = os.path.splitext(img_path)
+            img_path = basename  + os.path.split(path)[-1] + ext
+
+        img = bpy.data.images.load(os.path.join(path, name))
+        img.pack(True)
+        # We don't want images whose file have the same name since they are
+        # overriden when being unpacked. So we rename them in this case
+        # by adding the directory name
+        img.filepath = img_path
+
     elif name[-4:].lower() == ".mbm":
         w,h, pixels = load_mbm(os.path.join(path, name))
         img = bpy.data.images.new(name, w, h)
