@@ -277,7 +277,9 @@ def load_mbm(mbmpath):
 
 def load_image(name, path):
     if name[-4:].lower() in [".png", ".tga"]:
-        bpy.data.images.load(os.path.join(path, name))
+        img = bpy.data.images.load(os.path.join(path, name))
+        img.pack(True)
+        img.filepath = img.filepath[:-4] + os.path.split(path)[-1] + '.png'
     elif name[-4:].lower() == ".mbm":
         w,h, pixels = load_mbm(os.path.join(path, name))
         img = bpy.data.images.new(name, w, h)
