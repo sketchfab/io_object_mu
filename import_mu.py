@@ -309,10 +309,12 @@ def create_textures(mu, path):
         for e in lst:
             try:
                 name = base+e
-                load_image(name, path)
-                tx = bpy.data.textures.new(tex.name, 'IMAGE')
-                tx.use_preview_alpha = True
-                tx.image = bpy.data.images[name]
+                if not any(os.path.join(path, name) == packedimg.filepath \
+                           for packedimg in bpy.data.images.values()):
+                    load_image(name, path)
+                    tx = bpy.data.textures.new(tex.name, 'IMAGE')
+                    tx.use_preview_alpha = True
+                    tx.image = bpy.data.images[name]
                 break
             except FileNotFoundError:
                 continue
