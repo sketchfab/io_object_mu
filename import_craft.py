@@ -156,7 +156,7 @@ class CraftReader(object):
                 scale = prefabs_dict[part['name']]['scale']
                 if len(scale.split(',')) == 3:
                     scalex, scaley, scalez = scale.split(',')
-                    duplicated.scale =(float(scalex), float(scaley), float(scalez))
+                    duplicated.scale = (float(scalex), float(scaley), float(scalez))
 
             duplicated.parent = root
             part['object'] = duplicated
@@ -310,7 +310,7 @@ def check_parts_in_directory(directory):
 def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     ''' Read a.craft file, retrieve .mu parts and build the ship'''
 
-    colliders= False
+    colliders = False
     directory = os.path.dirname(os.path.realpath(craft_file_path))
     available_parts_files = check_parts_in_directory(directory)
 
@@ -335,7 +335,6 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     if VERBOSE:
         print_blender_data_stats('generated')
 
-
     # We need to set a hemisphere light to lit correclty the model
     # in the Sketchfab viewer
 
@@ -352,7 +351,7 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     bpy.ops.object.delete()
 
     # Create hemisphere light
-    lamp_data = bpy.data.lamps.new(name="Hemi", type = 'HEMI')
+    lamp_data = bpy.data.lamps.new(name="Hemi", type='HEMI')
     lamp_object = bpy.data.objects.new(name="Hemi", object_data=lamp_data)
     bpy.context.scene.objects.link(lamp_object)
     lamp_object.location = (5.0, 5.0, 5.0)
@@ -361,6 +360,5 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     lamp_object.rotation_euler[1] = 0.2
     lamp_object.select = True
     bpy.context.scene.objects.active = lamp_object
-
 
     return result
