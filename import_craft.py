@@ -151,6 +151,13 @@ class CraftReader(object):
             # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
             if 'rescaleFactor' not in prefabs_dict[part['name']]:
                 duplicated.scale = (1.25, 1.25, 1.25)
+            # V 1.0.2 of KSP introduced scale data on some cfg files
+            if 'scale' in prefabs_dict[part['name']]:
+                scale = prefabs_dict[part['name']]['scale']
+                if len(scale.split(',')) == 3:
+                    scalex, scaley, scalez = scale.split(',')
+                    duplicated.scale = (float(scalex), float(scaley), float(scalez))
+
             duplicated.parent = root
             part['object'] = duplicated
 
@@ -241,16 +248,20 @@ def parse_cfg_node(cfgnode, cfgpath, root, files, parts_files):
     partname = ""
     meshpath = None
     rescalefactor = None
-
+    scale = None
     # The mesh can be defined by a MODEL node -> parsing nodes
     # if cfgnode.nodes[0[1].nodes is not None:
     if cfgnode.nodes[0][1] is not None:
         for node in cfgnode.nodes[0][1].nodes:
             if node[0] == 'MODEL':
-                candidate = os.path.join(cfgpath, os.path.split(node[1].values[0][1])[-1] + '.mu')
-                if os.path.isfile(candidate):
-                    meshpath = candidate
-                else:
+                for label, value in node[1].values:
+                    if label == 'model':
+                        candidate = os.path.join(cfgpath, os.path.basename(value) + '.mu')
+                        if os.path.isfile(candidate):
+                            meshpath = candidate
+                    if label == 'scale':
+                        scale = value
+                if not meshpath:
                     print('The corresponding mu file "{}" is not found. Looking for mesh field'.format(candidate))
 
     # The mesh can also be defined by 'mesh' token. Also retrieving relevant part data
@@ -276,6 +287,8 @@ def parse_cfg_node(cfgnode, cfgpath, root, files, parts_files):
         parts_files[partname]['mu'] = meshpath
         if rescalefactor:
             parts_files[partname]['rescaleFactor'] = rescalefactor
+        if scale:
+            parts_files[partname]['scale'] = scale
 
 
 def check_parts_in_directory(directory):
@@ -297,7 +310,7 @@ def check_parts_in_directory(directory):
 def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     ''' Read a.craft file, retrieve .mu parts and build the ship'''
 
-    colliders= False
+    colliders = False
     directory = os.path.dirname(os.path.realpath(craft_file_path))
     available_parts_files = check_parts_in_directory(directory)
 
@@ -322,7 +335,6 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     if VERBOSE:
         print_blender_data_stats('generated')
 
-
     # We need to set a hemisphere light to lit correclty the model
     # in the Sketchfab viewer
 
@@ -339,7 +351,7 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     bpy.ops.object.delete()
 
     # Create hemisphere light
-    lamp_data = bpy.data.lamps.new(name="Hemi", type = 'HEMI')
+    lamp_data = bpy.data.lamps.new(name="Hemi", type='HEMI')
     lamp_object = bpy.data.objects.new(name="Hemi", object_data=lamp_data)
     bpy.context.scene.objects.link(lamp_object)
     lamp_object.location = (5.0, 5.0, 5.0)
@@ -348,6 +360,5 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     lamp_object.rotation_euler[1] = 0.2
     lamp_object.select = True
     bpy.context.scene.objects.active = lamp_object
-
 
     return result
