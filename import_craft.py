@@ -114,10 +114,12 @@ class CraftReader(object):
     def read_parts_models(self, prefabs_dict, colliders, allow_no_material_mesh):
         for part in prefabs_dict.values():
             unselect_all_objects()
+
             result = import_mu.import_mu(self, bpy.context, part['mu'], False)
             if not result == {'FINISHED'}:
-                print('Warning : Error while importing file {}'.format(part['mu']))
-                return
+                print('Warning: Error while importing file {}'.format(os.path.basename(part['mu'])))
+                continue
+
             part['object'] = bpy.context.scene.objects.active
             self.smooth_object_meshes(part['object'])
             self.rename_data_elements(part['object'])
@@ -138,28 +140,29 @@ class CraftReader(object):
     def generate_parts(self, parts, root, prefabs_dict):
         ''' Generate parts and set it according to corresponding data'''
         for part in parts:
-            bpy.context.scene.objects.active = prefabs_dict[part['name']]['object']
-            obj = prefabs_dict[part['name']]['object']
+            if 'object' in prefabs_dict[part['name']]:
+                bpy.context.scene.objects.active = prefabs_dict[part['name']]['object']
+                obj = prefabs_dict[part['name']]['object']
 
-            # Duplicate the prefab and apply the transform
-            duplicated = duplicate_object_hierarchy(obj)
-            self.apply_craft_transformations(part, duplicated)
-            bpy.context.scene.objects.active = duplicated
-            duplicated.name = part['name'] + '_' + part['key']
-            # Pars that have a rescaleFactor parameter need to
-            # be rescaled by 1.25
-            # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
-            if 'rescaleFactor' not in prefabs_dict[part['name']]:
-                duplicated.scale = (1.25, 1.25, 1.25)
-            # V 1.0.2 of KSP introduced scale data on some cfg files
-            if 'scale' in prefabs_dict[part['name']]:
-                scale = prefabs_dict[part['name']]['scale']
-                if len(scale.split(',')) == 3:
-                    scalex, scaley, scalez = scale.split(',')
-                    duplicated.scale = (float(scalex), float(scaley), float(scalez))
+                # Duplicate the prefab and apply the transform
+                duplicated = duplicate_object_hierarchy(obj)
+                self.apply_craft_transformations(part, duplicated)
+                bpy.context.scene.objects.active = duplicated
+                duplicated.name = part['name'] + '_' + part['key']
+                # Pars that have a rescaleFactor parameter need to
+                # be rescaled by 1.25
+                # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
+                if 'rescaleFactor' not in prefabs_dict[part['name']]:
+                    duplicated.scale = (1.25, 1.25, 1.25)
+                # V 1.0.2 of KSP introduced scale data on some cfg files
+                if 'scale' in prefabs_dict[part['name']]:
+                    scale = prefabs_dict[part['name']]['scale']
+                    if len(scale.split(',')) == 3:
+                        scalex, scaley, scalez = scale.split(',')
+                        duplicated.scale = (float(scalex), float(scaley), float(scalez))
 
-            duplicated.parent = root
-            part['object'] = duplicated
+                duplicated.parent = root
+                part['object'] = duplicated
 
         unselect_all_objects()
 
