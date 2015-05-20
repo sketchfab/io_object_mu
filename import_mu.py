@@ -343,17 +343,21 @@ def import_mu(self, context, filepath, create_colliders):
         obj.select = False
 
     mu = Mu()
-    if not mu.read(filepath):
-        operator.report({'ERROR'},
-            "Unrecognized format: %s %d" % (mu.magic, mu.version))
+    try:
+        if not mu.read(filepath):
+            operator.report({'ERROR'},
+                "Unrecognized format: %s %d" % (mu.magic, mu.version))
+            return {'CANCELLED'}
+
+        create_textures(mu, os.path.dirname(filepath))
+        create_materials(mu)
+        mu.objects = {}
+        obj = create_object(mu, mu.obj, None, create_colliders, [])
+        bpy.context.scene.objects.active = obj
+        obj.select = True
+
+        bpy.context.user_preferences.edit.use_global_undo = undo
+        return {'FINISHED'}
+    except EOFError:
         return {'CANCELLED'}
 
-    create_textures(mu, os.path.dirname(filepath))
-    create_materials(mu)
-    mu.objects = {}
-    obj = create_object(mu, mu.obj, None, create_colliders, [])
-    bpy.context.scene.objects.active = obj
-    obj.select = True
-
-    bpy.context.user_preferences.edit.use_global_undo = undo
-    return {'FINISHED'}
