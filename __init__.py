@@ -152,8 +152,8 @@ class CommandLineImporter():
         print("[{}] {}".format(','.join(type), message))
 
 class CommandLineCraftImporter():
-    def execute(self, context, filepath, colliders, allow_no_material_mesh):
-        return import_craft.import_craft(context, filepath, colliders, allow_no_material_mesh)
+    def execute(self, context, filepath, colliders):
+        return import_craft.import_craft(context, filepath, colliders)
 
 
 def main():
@@ -171,7 +171,6 @@ def main():
     parser.add_argument("-i", "--input", dest="input_file", metavar='FILE|PATH', help="Import .mu/.craft file")
     parser.add_argument("-o", "--output", dest="output_file", metavar='FILE|PATH', help="Save blender file")
     parser.add_argument("-c", "--colliders", dest="colliders", default=False, action='store_true', help="Create colliders")
-    parser.add_argument("-n", "--allow-nomat", dest="allow_no_material_mesh", action='store_true', default=False)
     # parser.add_argument("-a", "--enable-animation", dest="enable_animation", action="store_const", const=True, default=False, help="Enable saving of animations")
     # parser.add_argument("-m", "--apply-modifiers", dest="apply_modifiers", action="store_const", const=True, default=False, help="Apply modifiers before exporting")
     # parser.add_argument("-j", "--json-materials", dest="json_materials", action="store_const", const=True, default=False, help="Store materials into JSON format")
@@ -189,7 +188,7 @@ def main():
         extension = args.input_file.split('.')[-1]
         if extension == 'craft':
             importer = CommandLineCraftImporter()
-            result = importer.execute(bpy.context, args.input_file, args.colliders, args.allow_no_material_mesh)
+            result = importer.execute(bpy.context, args.input_file, args.colliders)
         else:
             importer = CommandLineImporter()
             result = importer.execute(bpy.context, args.input_file, args.colliders)
