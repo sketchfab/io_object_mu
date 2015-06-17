@@ -107,6 +107,7 @@ class CraftReader(object):
         # Set of required models
         self.prefabs = []
         self.nb_total_parts = 0
+        self.ignored_parts = ['launchClamp1', 'fuelLine', 'strutConnector']
 
     def rename_data_elements(self, ob):
         ''' Rename the datas to avoid overriding while loading parts '''
@@ -230,7 +231,7 @@ class CraftReader(object):
         craft_parts = []
         for node in cfgnode.nodes:
             part = self.read_craft_node(node, parts_files)
-            if part is not None:
+            if part is not None and part['name'] not in self.ignored_parts:
                 craft_parts.append(part)
 
         return craft_parts
