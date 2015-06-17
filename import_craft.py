@@ -97,6 +97,10 @@ def is_collider(obj):
     return obj.type == 'MESH' and len(obj.material_slots) == 0
 
 
+def is_fairing(obj):
+    return 'fairing' in obj.name
+
+
 class CraftReader(object):
     def __init__(self):
         self.ship_name = ""
@@ -142,6 +146,13 @@ class CraftReader(object):
         blender_object.rotation_mode = 'QUATERNION'
         blender_object.rotation_quaternion = part_node['rot']
 
+    def hide_bottom_part_fairings(self, part_blender_object):
+        ''' Hides bottom part fairing '''
+        unselect_all_objects()
+        select_children(part_blender_object)
+        hide_by_filter(is_fairing)
+        unselect_all_objects()
+
     def generate_parts(self, parts, root, prefabs_dict):
         ''' Generate parts and set it according to corresponding data'''
         for part in parts:
@@ -155,8 +166,12 @@ class CraftReader(object):
                 bpy.context.scene.objects.active = duplicated
                 duplicated.name = part['name'] + '_' + part['key']
 
-                # Parts have to be rescaled according to a rescaleFactor
-                # if not specified, default value is 1.25
+                # Need to hide fairing if no part at the bottom
+                if 'bottom' not in part.get('attN', ''):
+                    self.hide_bottom_part_fairings(duplicated)
+
+                # Pars that have a rescaleFactor parameter need to
+                # be rescaled by 1.25
                 # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
                 rescaleFactor = float(prefabs_dict[part['name']].get('rescaleFactor', 1.25))
                 duplicated.scale = (rescaleFactor, rescaleFactor, rescaleFactor)
@@ -195,6 +210,9 @@ class CraftReader(object):
                 part[label] = read_vector(value)
             elif label in ['rot', 'attRot']:
                 part[label] = read_quaternion(value)
+            elif label == 'attN':
+                node_attn, attached_part = value.split(',')
+                part.setdefault(label, {})[node_attn] = attached_part
             else:
                 part[label] = value
 
