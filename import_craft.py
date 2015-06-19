@@ -85,12 +85,29 @@ def get_extension(filepath):
     return ext[1:]
 
 
+def hide_by_filter(func, objects=None):
+    if objects is None:
+        objects = bpy.context.selected_objects
+    for obj in filter(func, objects):
+        obj.hide = True
+
+
+def is_collider(obj):
+    # Considered as collider if mesh and no material
+    return obj.type == 'MESH' and len(obj.material_slots) == 0
+
+
+def is_fairing(obj):
+    return 'fairing' in obj.name
+
+
 class CraftReader(object):
     def __init__(self):
         self.ship_name = ""
         # Set of required models
         self.prefabs = []
         self.nb_total_parts = 0
+        self.ignored_parts = ['launchClamp1', 'fuelLine', 'strutConnector']
 
     def rename_data_elements(self, ob):
         ''' Rename the datas to avoid overriding while loading parts '''
@@ -111,7 +128,7 @@ class CraftReader(object):
                 # Need to come back to OBJECT mode to avoid context error
                 bpy.ops.object.mode_set(mode='OBJECT')
 
-    def read_parts_models(self, prefabs_dict, colliders, allow_no_material_mesh):
+    def read_parts_models(self, prefabs_dict, colliders):
         for part in prefabs_dict.values():
             unselect_all_objects()
 
@@ -124,18 +141,18 @@ class CraftReader(object):
             self.smooth_object_meshes(part['object'])
             self.rename_data_elements(part['object'])
 
-        if not allow_no_material_mesh:
-            unselect_all_objects()
-            for ob in bpy.data.objects:
-                if ob.type == 'MESH' and len(ob.material_slots) == 0:
-                    ob.select = True
-            bpy.ops.object.delete()
-
     def apply_craft_transformations(self, part_node, blender_object):
         ''' Apply .craft file transformations '''
         blender_object.location = part_node['pos']
         blender_object.rotation_mode = 'QUATERNION'
         blender_object.rotation_quaternion = part_node['rot']
+
+    def hide_bottom_part_fairings(self, part_blender_object):
+        ''' Hides bottom part fairing '''
+        unselect_all_objects()
+        select_children(part_blender_object)
+        hide_by_filter(is_fairing)
+        unselect_all_objects()
 
     def generate_parts(self, parts, root, prefabs_dict):
         ''' Generate parts and set it according to corresponding data'''
@@ -150,8 +167,12 @@ class CraftReader(object):
                 bpy.context.scene.objects.active = duplicated
                 duplicated.name = part['name'] + '_' + part['key']
 
-                # Parts have to be rescaled according to a rescaleFactor
-                # if not specified, default value is 1.25
+                # Need to hide fairing if no part at the bottom
+                if 'bottom' not in part.get('attN', ''):
+                    self.hide_bottom_part_fairings(duplicated)
+
+                # Pars that have a rescaleFactor parameter need to
+                # be rescaled by 1.25
                 # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
                 rescaleFactor = float(prefabs_dict[part['name']].get('rescaleFactor', 1.25))
                 duplicated.scale = (rescaleFactor, rescaleFactor, rescaleFactor)
@@ -190,6 +211,9 @@ class CraftReader(object):
                 part[label] = read_vector(value)
             elif label in ['rot', 'attRot']:
                 part[label] = read_quaternion(value)
+            elif label == 'attN':
+                node_attn, attached_part = value.split(',')
+                part.setdefault(label, {})[node_attn] = attached_part
             else:
                 part[label] = value
 
@@ -207,7 +231,7 @@ class CraftReader(object):
         craft_parts = []
         for node in cfgnode.nodes:
             part = self.read_craft_node(node, parts_files)
-            if part is not None:
+            if part is not None and part['name'] not in self.ignored_parts:
                 craft_parts.append(part)
 
         return craft_parts
@@ -312,7 +336,7 @@ def check_parts_in_directory(directory):
     return parts_files
 
 
-def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
+def import_craft(context, craft_file_path, colliders):
     ''' Read a.craft file, retrieve .mu parts and build the ship'''
 
     colliders = False
@@ -328,7 +352,7 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
             used_parts_files[partfile] = available_parts_files[partfile]
 
     # Read mu files
-    creader.read_parts_models(used_parts_files, colliders, allow_no_material_mesh)
+    creader.read_parts_models(used_parts_files, colliders)
 
     print('INFO : {} were found \n  - {} were used\
            \n  - The final ship has {} parts'.format(len(available_parts_files),
@@ -365,5 +389,9 @@ def import_craft(context, craft_file_path, colliders, allow_no_material_mesh):
     lamp_object.rotation_euler[1] = 0.2
     lamp_object.select = True
     bpy.context.scene.objects.active = lamp_object
+
+    # Look for collider objects (i.e mesh with no materials)
+    # And simply hide them: they will not be exported
+    hide_by_filter(is_collider, bpy.data.objects)
 
     return result
