@@ -149,11 +149,13 @@ class CraftReader(object):
                 self.apply_craft_transformations(part, duplicated)
                 bpy.context.scene.objects.active = duplicated
                 duplicated.name = part['name'] + '_' + part['key']
-                # Pars that have a rescaleFactor parameter need to
-                # be rescaled by 1.25
+
+                # Parts have to be rescaled according to a rescaleFactor
+                # if not specified, default value is 1.25
                 # see http://wiki.kerbalspaceprogram.com/wiki/CFG_File_Documentation#Asset_Parameters
-                if 'rescaleFactor' not in prefabs_dict[part['name']]:
-                    duplicated.scale = (1.25, 1.25, 1.25)
+                rescaleFactor = float(prefabs_dict[part['name']].get('rescaleFactor', 1.25))
+                duplicated.scale = (rescaleFactor, rescaleFactor, rescaleFactor)
+
                 # V 1.0.2 of KSP introduced scale data on some cfg files
                 if 'scale' in prefabs_dict[part['name']]:
                     scale = prefabs_dict[part['name']]['scale']
