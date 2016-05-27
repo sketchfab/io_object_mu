@@ -19,7 +19,7 @@
 
 # <pep8 compliant>
 
-from script import Script
+from .script import Script
 
 class ConfigNodeError(Exception):
     def __init__(self, fname, line, message):

@@ -1,7 +1,7 @@
 import os
 import bpy
-import import_mu
-from cfgnode import ConfigNode
+from . import import_mu
+from .cfgnode import ConfigNode
 VERBOSE = True
 
 
