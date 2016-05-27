@@ -22,7 +22,7 @@
 from struct import pack, unpack
 class MuEnum:
     MODEL_BINARY = 76543
-    FILE_VERSION = 3
+    FILE_VERSION = 4
 
     ET_CHILD_TRANSFORM_START = 0
     ET_CHILD_TRANSFORM_END = 1
@@ -55,6 +55,7 @@ class MuEnum:
     ET_BOX_COLLIDER2 = 28
     ET_WHEEL_COLLIDER = 29
     ET_CAMERA = 30
+    ET_PARTICLES = 31
     ENTRY_TYPES = {
         'ET_CHILD_TRANSFORM_START':ET_CHILD_TRANSFORM_START,
         'ET_CHILD_TRANSFORM_END':ET_CHILD_TRANSFORM_END,
@@ -87,6 +88,7 @@ class MuEnum:
         'ET_BOX_COLLIDER2':ET_BOX_COLLIDER2,
         'ET_WHEEL_COLLIDER':ET_WHEEL_COLLIDER,
         'ET_CAMERA':ET_CAMERA,
+        'ET_PARTICLES':ET_PARTICLES,
     }
 
     ST_CUSTOM = 0
@@ -97,12 +99,14 @@ class MuEnum:
     ST_EMISSIVE = 5
     ST_EMISSIVE_SPECULAR = 6
     ST_EMISSIVE_BUMPED_SPECULAR = 7
-    ST_ALPHA_CUTOUT = 8
-    ST_ALPHA_CUTOUT_BUMPED = 9
+    ST_ALPHA_CUTOFF = 8
+    ST_ALPHA_CUTOFF_BUMPED = 9
     ST_ALPHA = 10
     ST_ALPHA_SPECULAR = 11
     ST_ALPHA_UNLIT = 12
     ST_UNLIT = 13
+    ST_PARTICLES_ALPHA_BLENDED = 14
+    ST_PARTICLES_ADDITIVE = 15
     SHADER_TYPES = {
         'ST_CUSTOM':ST_CUSTOM,
         'ST_DIFFUSE':ST_DIFFUSE,
@@ -112,12 +116,14 @@ class MuEnum:
         'ST_EMISSIVE':ST_EMISSIVE,
         'ST_EMISSIVE_SPECULAR':ST_EMISSIVE_SPECULAR,
         'ST_EMISSIVE_BUMPED_SPECULAR':ST_EMISSIVE_BUMPED_SPECULAR,
-        'ST_ALPHA_CUTOUT':ST_ALPHA_CUTOUT,
-        'ST_ALPHA_CUTOUT_BUMPED':ST_ALPHA_CUTOUT_BUMPED,
+        'ST_ALPHA_CUTOFF':ST_ALPHA_CUTOFF,
+        'ST_ALPHA_CUTOFF_BUMPED':ST_ALPHA_CUTOFF_BUMPED,
         'ST_ALPHA':ST_ALPHA,
         'ST_ALPHA_SPECULAR':ST_ALPHA_SPECULAR,
         'ST_ALPHA_UNLIT':ST_ALPHA_UNLIT,
         'ST_UNLIT':ST_UNLIT,
+        'ST_PARTICLES_ALPHA_BLENDED':ST_PARTICLES_ALPHA_BLENDED,
+        'ST_PARTICLES_ADDITIVE':ST_PARTICLES_ADDITIVE,
     }
     ShaderNames = (
         "",
@@ -134,6 +140,8 @@ class MuEnum:
         "KSP/Alpha/Translucent Specular",
         "KSP/Alpha/Unlit Transparent",
         "KSP/Unlit",
+        "KSP/Particles/Alpha Blended",
+        "KSP/Particles/Additive",
     )
 
     AT_TRANSFORM = 0
@@ -181,121 +189,145 @@ class MuMatTex:
         mu.write_float(self.scale)
         mu.write_float(self.offset)
 
+def read_material4(self, mu):
+    self.name = mu.read_string()
+    self.shaderName = mu.read_string()
+    num_properties = mu.read_int()
+    #print("MuMaterial4", self.name, self.shaderName, num_properties)
+    while num_properties > 0:
+        propName = mu.read_string()
+        propType = mu.read_int()
+        if propType == 0:
+            v = self.colorProperties[propName] = mu.read_float(4)
+        elif propType == 1:
+            v = self.vectorProperties[propName] = mu.read_float(4)
+        elif propType == 2:
+            v = self.floatProperties2[propName] = mu.read_float()
+        elif propType == 3:
+            v = self.floatProperties3[propName] = mu.read_float()
+        elif propType == 4:
+            v = self.textureProperties[propName] = MuMatTex().read(mu)
+        #print("   ", propName, propType, v)
+        num_properties -= 1
+    return self
+
+def read_material3(self, mu):
+    self.name = mu.read_string()
+    type = mu.read_int()
+    self.shaderName = MuEnum.ShaderNames[type]
+    if type == MuEnum.ST_SPECULAR:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_SpecColor"] = mu.read_float(4)
+        self.floatProperties3["_Shininess"] = mu.read_float()
+    elif type == MuEnum.ST_BUMPED:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.textureProperties["_BumpMap"] = MuMatTex().read(mu)
+    elif type == MuEnum.ST_BUMPED_SPECULAR:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.textureProperties["_BumpMap"] = MuMatTex().read(mu)
+        self.colorProperties["_SpecColor"] = mu.read_float(4)
+        self.floatProperties3["_Shininess"] = mu.read_float()
+    elif type == MuEnum.ST_EMISSIVE:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.textureProperties["_Emissive"] = MuMatTex().read(mu)
+        self.colorProperties["_EmissiveColor"] = mu.read_float(4)
+    elif type == MuEnum.ST_EMISSIVE_SPECULAR:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_SpecColor"] = mu.read_float(4)
+        self.floatProperties3["_Shininess"] = mu.read_float()
+        self.textureProperties["_Emissive"] = MuMatTex().read(mu)
+        self.colorProperties["_EmissiveColor"] = mu.read_float(4)
+    elif type == MuEnum.ST_EMISSIVE_BUMPED_SPECULAR:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.textureProperties["_BumpMap"] = MuMatTex().read(mu)
+        self.colorProperties["_SpecColor"] = mu.read_float(4)
+        self.floatProperties3["_Shininess"] = mu.read_float()
+        self.textureProperties["_Emissive"] = MuMatTex().read(mu)
+        self.colorProperties["_EmissiveColor"] = mu.read_float(4)
+    elif type == MuEnum.ST_ALPHA_CUTOFF:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        #FIXME floatProperties2?
+        self.floatProperties3["_Cutoff"] = mu.read_float()
+    elif type == MuEnum.ST_ALPHA_CUTOFF_BUMPED:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.textureProperties["_BumpMap"] = MuMatTex().read(mu)
+        #FIXME floatProperties2?
+        self.floatProperties3["_Cutoff"] = mu.read_float()
+    elif type == MuEnum.ST_ALPHA:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+    elif type == MuEnum.ST_ALPHA_SPECULAR:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        #FIXME floatProperties2?
+        self.floatProperties3["_Gloss"] = mu.read_float()
+        self.colorProperties["_SpecColor"] = mu.read_float(4)
+        self.floatProperties3["_Shininess"] = mu.read_float()
+    elif type == MuEnum.ST_ALPHA_UNLIT:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_Color"] = mu.read_float(4)
+    elif type == MuEnum.ST_UNLIT:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_Color"] = mu.read_float(4)
+    elif type == MuEnum.ST_DIFFUSE:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+    elif type == MuEnum.ST_PARTICLES_ALPHA_BLENDED:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_Color"] = mu.read_float(4)
+        #FIXME floatProperties3?
+        self.floatProperties2["_InvFade"] = mu.read_float()
+    elif type == MuEnum.ST_PARTICLES_ADDITIVE:
+        self.textureProperties["_MainTex"] = MuMatTex().read(mu)
+        self.colorProperties["_Color"] = mu.read_float(4)
+        #FIXME floatProperties3?
+        self.floatProperties2["_InvFade"] = mu.read_float()
+    else:
+        raise ValueError("MuMaterial %d" % self.type)
+    return self
+
 class MuMaterial:
     def __init__(self):
+        self.colorProperties = {}
+        self.vectorProperties = {}
+        self.floatProperties2 = {}
+        self.floatProperties3 = {}
+        self.textureProperties = {}
         pass
     def read(self, mu):
         #print("MuMaterial")
-        self.name = mu.read_string()
-        self.type = mu.read_int()
-        if self.type == MuEnum.ST_SPECULAR:
-            self.mainTex = MuMatTex().read(mu)
-            self.specColor = mu.read_float(4)
-            self.shininess = mu.read_float()
-        elif self.type == MuEnum.ST_BUMPED:
-            self.mainTex = MuMatTex().read(mu)
-            self.bumpMap = MuMatTex().read(mu)
-        elif self.type == MuEnum.ST_BUMPED_SPECULAR:
-            self.mainTex = MuMatTex().read(mu)
-            self.bumpMap = MuMatTex().read(mu)
-            self.specColor = mu.read_float(4)
-            self.shininess = mu.read_float()
-        elif self.type == MuEnum.ST_EMISSIVE:
-            self.mainTex = MuMatTex().read(mu)
-            self.emissive = MuMatTex().read(mu)
-            self.emissiveColor = mu.read_float(4)
-        elif self.type == MuEnum.ST_EMISSIVE_SPECULAR:
-            self.mainTex = MuMatTex().read(mu)
-            self.specColor = mu.read_float(4)
-            self.shininess = mu.read_float()
-            self.emissive = MuMatTex().read(mu)
-            self.emissiveColor = mu.read_float(4)
-        elif self.type == MuEnum.ST_EMISSIVE_BUMPED_SPECULAR:
-            self.mainTex = MuMatTex().read(mu)
-            self.bumpMap = MuMatTex().read(mu)
-            self.specColor = mu.read_float(4)
-            self.shininess = mu.read_float()
-            self.emissive = MuMatTex().read(mu)
-            self.emissiveColor = mu.read_float(4)
-        elif self.type == MuEnum.ST_ALPHA_CUTOUT:
-            self.mainTex = MuMatTex().read(mu)
-            self.cutoff = mu.read_float()
-        elif self.type == MuEnum.ST_ALPHA_CUTOUT_BUMPED:
-            self.mainTex = MuMatTex().read(mu)
-            self.bumpMap = MuMatTex().read(mu)
-            self.cutoff = mu.read_float()
-        elif self.type == MuEnum.ST_ALPHA:
-            self.mainTex = MuMatTex().read(mu)
-        elif self.type == MuEnum.ST_ALPHA_SPECULAR:
-            self.mainTex = MuMatTex().read(mu)
-            self.gloss = mu.read_float()
-            self.specColor = mu.read_float(4)
-            self.shininess = mu.read_float()
-        elif self.type == MuEnum.ST_ALPHA_UNLIT:
-            self.mainTex = MuMatTex().read(mu)
-            self.color = mu.read_float(4)
-        elif self.type == MuEnum.ST_UNLIT:
-            self.mainTex = MuMatTex().read(mu)
-            self.color = mu.read_float(4)
-        elif self.type == MuEnum.ST_DIFFUSE:
-            self.mainTex = MuMatTex().read(mu)
+        if mu.version >= 4:
+            return read_material4(self, mu)
         else:
-            raise ValueError("MuMaterial %d" % self.type)
-        return self
+            return read_material3(self, mu)
     def write(self, mu):
+        num_properties = (
+            len(self.colorProperties)
+            + len(self.vectorProperties)
+            + len(self.floatProperties2)
+            + len(self.floatProperties3)
+            + len(self.textureProperties)
+        )
         mu.write_string(self.name)
-        mu.write_int(self.type)
-        if self.type == MuEnum.ST_SPECULAR:
-            self.mainTex.write(mu)
-            mu.write_float(self.specColor)
-            mu.write_float(self.shininess)
-        elif self.type == MuEnum.ST_BUMPED:
-            self.mainTex.write(mu)
-            self.bumpMap.write(mu)
-        elif self.type == MuEnum.ST_BUMPED_SPECULAR:
-            self.mainTex.write(mu)
-            self.bumpMap.write(mu)
-            mu.write_float(self.specColor)
-            mu.write_float(self.shininess)
-        elif self.type == MuEnum.ST_EMISSIVE:
-            self.mainTex.write(mu)
-            self.emissive.write(mu)
-            mu.write_float(self.emissiveColor)
-        elif self.type == MuEnum.ST_EMISSIVE_SPECULAR:
-            self.mainTex.write(mu)
-            mu.write_float(self.specColor)
-            mu.write_float(self.shininess)
-            self.emissive.write(mu)
-            mu.write_float(self.emissiveColor)
-        elif self.type == MuEnum.ST_EMISSIVE_BUMPED_SPECULAR:
-            self.mainTex.write(mu)
-            self.bumpMap.write(mu)
-            mu.write_float(self.specColor)
-            mu.write_float(self.shininess)
-            self.emissive.write(mu)
-            mu.write_float(self.emissiveColor)
-        elif self.type == MuEnum.ST_ALPHA_CUTOUT:
-            self.mainTex.write(mu)
-            mu.write_float(self.cutoff)
-        elif self.type == MuEnum.ST_ALPHA_CUTOUT_BUMPED:
-            self.mainTex.write(mu)
-            self.bumpMap.write(mu)
-            mu.write_float(self.cutoff)
-        elif self.type == MuEnum.ST_ALPHA:
-            self.mainTex.write(mu)
-        elif self.type == MuEnum.ST_ALPHA_SPECULAR:
-            self.mainTex.write(mu)
-            mu.write_float(self.gloss)
-            mu.write_float(self.specColor)
-            mu.write_float(self.shininess)
-        elif self.type == MuEnum.ST_ALPHA_UNLIT:
-            self.mainTex.write(mu)
-            mu.write_float(self.color)
-        elif self.type == MuEnum.ST_UNLIT:
-            self.mainTex.write(mu)
-            mu.write_float(self.color)
-        elif self.type == MuEnum.ST_DIFFUSE:
-            self.mainTex.write(mu)
+        mu.write_string(self.shaderName)
+        mu.write_int(num_properties)
+        for k in self.colorProperties:
+            mu.write_string(k)
+            mu.write_int(0)
+            mu.write_float(self.colorProperties[k])
+        for k in self.vectorProperties:
+            mu.write_string(k)
+            mu.write_int(1)
+            mu.write_float(self.vectorProperties[k])
+        for k in self.floatProperties2:
+            mu.write_string(k)
+            mu.write_int(2)
+            mu.write_float(self.floatProperties2[k])
+        for k in self.floatProperties3:
+            mu.write_string(k)
+            mu.write_int(3)
+            mu.write_float(self.floatProperties3[k])
+        for k in self.textureProperties:
+            mu.write_string(k)
+            mu.write_int(4)
+            self.textureProperties[k].write(mu)
 
 class MuTransform:
     def __init__(self):
@@ -746,7 +778,7 @@ class MuCamera:
         self.clearFlags = mu.read_int()
         self.backgroundColor = mu.read_float(4)
         self.cullingMask = mu.read_int()
-        self.orthographic = mu.read_int()
+        self.orthographic = mu.read_byte()
         self.fov = mu.read_float()
         self.near = mu.read_float()
         self.far = mu.read_float()
@@ -762,6 +794,82 @@ class MuCamera:
         mu.write_float(self.near)
         mu.write_float(self.far)
         mu.write_float(self.dept)
+
+class MuParticles:
+    def __init__(self):
+        pass
+    def read(self, mu):
+        self.emit = mu.read_byte()
+        self.shape = mu.read_int()
+        self.shape3d = mu.read_vector()
+        self.shape2d = mu.read_float(2)
+        self.shape1d = mu.read_float()
+        self.color = mu.read_float(4)
+        self.useUorldSpace = mu.read_byte()
+        self.size = mu.read_float(2)    #min, max
+        self.energy = mu.read_float(2)  #min, max
+        self.emission = mu.read_int(2)  #min, max
+        self.worldVelocity = mu.read_vector()
+        self.localVelocity = mu.read_vector()
+        self.rndVelocity = mu.read_vector()
+        self.emitterVelocityScale = mu.read_float()
+        self.angularVelocity = mu.read_float()
+        self.rndAngularVelocity = mu.read_float()
+        self.rndRotation = mu.read_byte()
+        self.doesAnimateColor = mu.read_byte()
+        self.colorAnimation = [None]*5
+        for i in range(5):
+            self.colorAnimation[i] = mu.read_float(4)
+        self.worldRotationAxis = mu.read_vector()
+        self.localRotationAxis = mu.read_vector()
+        self.sizeGrow = mu.read_float()
+        self.rndForce = mu.read_vector()
+        self.force = mu.read_vector()
+        self.damping = mu.read_float()
+        self.castShadows = mu.read_byte()
+        self.recieveShadows = mu.read_byte()
+        self.lengthScale = mu.read_float()
+        self.velocityScale = mu.read_float()
+        self.maxParticleSize = mu.read_float()
+        self.particleRenderMode = mu.read_int()
+        self.uvAnimation = mu.read_int(3) #xtile, ytile, cycles
+        self.count = mu.read_int()
+        return self
+    def write(self, mu):
+        mu.write_byte(self.emit)
+        mu.write_int(self.shape)
+        mu.write_vector(self.shape3d)
+        mu.write_float(self.shape2d)
+        mu.write_float(self.shape1d)
+        mu.write_float(self.color)
+        mu.write_byte(self.useUorldSpace)
+        mu.write_float(self.size)
+        mu.write_float(self.energy)
+        mu.write_int(self.emission)
+        mu.write_vector(self.worldVelocity)
+        mu.write_vector(self.localVelocity)
+        mu.write_vector(self.rndVelocity)
+        mu.write_float(self.emitterVelocityScale)
+        mu.write_float(self.angularVelocity)
+        mu.write_float(self.rndAngularVelocity)
+        mu.write_byte(self.rndRotation)
+        mu.write_byte(self.doesAnimateColor)
+        for i in range(5):
+            mu.write_float(self.colorAnimation[i])
+        mu.write_vector(self.worldRotationAxis)
+        mu.write_vector(self.localRotationAxis)
+        mu.write_float(self.sizeGrow)
+        mu.write_vector(self.rndForce)
+        mu.write_vector(self.force)
+        mu.write_float(self.damping)
+        mu.write_byte(self.castShadows)
+        mu.write_byte(self.recieveShadows)
+        mu.write_float(self.lengthScale)
+        mu.write_float(self.velocityScale)
+        mu.write_float(self.maxParticleSize)
+        mu.write_int(self.particleRenderMode)
+        mu.write_int(self.uvAnimation)
+        mu.write_int(self.count)
 
 class MuLight:
     def __init__(self):
@@ -781,7 +889,7 @@ class MuLight:
         mu.write_float(self.intensity)
         mu.write_float(self.range)
         mu.write_float(self.color)
-        mu.write_int(self.cullingMask)
+        mu.write_uint(self.cullingMask)
         mu.write_float(self.spotAngle)
 
 class MuObject:
@@ -796,6 +904,7 @@ class MuObject:
                 entry_type = mu.read_int()
             except EOFError:
                 break
+            #print(entry_type, hex(mu.file.tell()))
             if entry_type == MuEnum.ET_CHILD_TRANSFORM_START:
                 self.children.append(MuObject().read(mu))
             elif entry_type == MuEnum.ET_CHILD_TRANSFORM_END:
@@ -822,12 +931,15 @@ class MuObject:
                 self.animation = MuAnimation().read(mu)
             elif entry_type == MuEnum.ET_CAMERA:
                 self.camera = MuCamera().read(mu)
+            elif entry_type == MuEnum.ET_PARTICLES:
+                self.particles = MuParticles().read(mu)
             elif entry_type == MuEnum.ET_LIGHT:
                 self.light = MuLight().read(mu)
             elif entry_type == MuEnum.ET_MATERIALS:
                 mat_count = mu.read_int()
                 for i in range(mat_count):
-                    mu.materials.append(MuMaterial().read(mu))
+                    mat = MuMaterial().read(mu)
+                    mu.materials.append(mat)
             elif entry_type == MuEnum.ET_TEXTURES:
                 tex_count = mu.read_int()
                 for i in range(tex_count):
@@ -937,6 +1049,11 @@ class Mu:
         if not hasattr(data, "__len__"):
             data = (data,)
         self.file.write(pack(("<%di" % len(data)), *data))
+
+    def write_uint(self, data):
+        if not hasattr(data, "__len__"):
+            data = (data,)
+        self.file.write(pack(("<%dI" % len(data)), *data))
 
     def write_float(self, data):
         if not hasattr(data, "__len__"):

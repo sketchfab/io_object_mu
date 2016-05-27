@@ -27,8 +27,7 @@ class ConfigNodeError(Exception):
         self.line = line
 
 def cfg_error(self, msg):
-    print ('Error while parsing the cfg node')
-   # raise ConfigNodeError(self.filename, self.line, msg)
+    raise ConfigNodeError(self.filename, self.line, msg)
 
 class ConfigNode:
     def __init__(self):
@@ -37,7 +36,7 @@ class ConfigNode:
     @classmethod
     def ParseNode(cls, node, script, top = False):
         while script.getToken(True) != None:
-            if script.token in (top and ['{', '='] or ['{', '=']):
+            if script.token in (top and ['{', '}', '='] or ['{', '=']):
                 cfg_error(script, "unexpected " + script.token)
             if script.token == '}':
                 return
