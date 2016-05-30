@@ -7,14 +7,14 @@ from io_object_mu import import_craft
 
 class CommandLineImporter():
     def execute(self, context, filepath, colliders):
-        return import_mu.import_mu(self, context, filepath, colliders)
+        return import_mu.import_mu(self, context, filepath, colliders, use_classic_material=True)
 
     def report(self, type, message):
         print("[{}] {}".format(','.join(type), message))
 
 class CommandLineCraftImporter():
     def execute(self, context, filepath, colliders):
-        return import_craft.import_craft(context, filepath, colliders)
+        return import_craft.import_craft(context, filepath, colliders, use_classic_material=True)
 
 def main():
     import argparse

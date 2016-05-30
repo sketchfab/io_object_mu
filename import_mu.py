@@ -33,6 +33,7 @@ from bpy.props import FloatVectorProperty, PointerProperty
 from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
 from .mu import MuColliderBox, MuColliderWheel
 from .shader import make_shader
+from .material import make_material
 from . import collider, properties
 
 def create_uvs(mu, uvs, mesh, name):
@@ -310,7 +311,6 @@ def load_image(name, path):
             if name[-6:-4] == "_n":
                 pixels = convert_bump(pixels, img.size[0], height)
             img.pixels = pixels[:]
-            img.pack(True)
     elif name[-4:].lower() == ".mbm":
         w,h, pixels = load_mbm(os.path.join(path, name))
         img = bpy.data.images.new(name, w, h)
@@ -350,12 +350,15 @@ def add_texture(mu, mat, mattex):
     ts.scale = s + (1,)
     ts.offset = o + (0,)
 
-def create_materials(mu):
+def create_materials(mu, use_classic=False):
     #material info is in the top level object
     for mumat in mu.materials:
-        mumat.material = make_shader(mumat, mu)
+        if(use_classic):
+            mumat.material = make_material(mumat, mu)
+        else:
+            mumat.material = make_shader(mumat, mu)
 
-def import_mu(self, context, filepath, create_colliders):
+def import_mu(self, context, filepath, create_colliders, use_classic_material=False):
     operator = self
     undo = bpy.context.user_preferences.edit.use_global_undo
     bpy.context.user_preferences.edit.use_global_undo = False
@@ -371,7 +374,7 @@ def import_mu(self, context, filepath, create_colliders):
         return {'CANCELLED'}
 
     create_textures(mu, os.path.dirname(filepath))
-    create_materials(mu)
+    create_materials(mu, use_classic_material)
     mu.objects = {}
     obj = create_object(mu, mu.obj, None, create_colliders, [])
     bpy.context.scene.objects.active = obj
