@@ -87,7 +87,7 @@ def set_bump(mat, texture):
         slot.use_map_normal = True
         slot.use_map_color_diffuse = False
         slot.texture.use_alpha = False
-        slot.normal_factor = 0.3
+        slot.normal_factor = 1.0
 
 
 def parse_material_factors(mumat, mat):
@@ -109,7 +109,7 @@ def parse_material_textures(mumat, mat, mutextures):
         elif k == '_Emissive':
             set_emissive(mat, mutexture)
         elif k == '_BumpMap':
-            print('bump')
+            set_bump(mat, mutexture)
 
 # Need to parse factors
 def make_material(mumat, mutextures):

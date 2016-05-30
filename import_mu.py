@@ -295,49 +295,59 @@ def load_mbm(mbmpath):
         pixels = convert_bump(pixels, width, height)
     return width, height, pixels
 
+def load_dds(dds_image):
+    pixels = list(img.pixels[:])
+    rowlen = img.size[0] * 4
+    height = img.size[1]
+    for y in range(int(height/2)):
+        ind1 = y * rowlen
+        ind2 = (height - 1 - y) * rowlen
+        t = pixels[ind1 : ind1 + rowlen]
+        pixels[ind1:ind1+rowlen] = pixels[ind2:ind2+rowlen]
+        pixels[ind2:ind2+rowlen] = t
+    if name[-6:-4] == "_n":
+        pixels = convert_bump(pixels, img.size[0], height)
+    img.pixels = pixels[:]
+
 def load_image(name, path):
-    if name[-4:].lower() in [".dds", ".png", ".tga"]:
+    img_path = os.path.join(path, name)
+    if any(name == os.path.basename(packed_img.filepath) \
+       for packed_img in bpy.data.images):
+        # Add the directory name between the file name and the extension
+        basename, ext = os.path.splitext(name)
+        img_path = basename  + os.path.split(path)[-1] + ext
+
+    if name[-4:].lower() in [".png", ".tga"]:
         img = bpy.data.images.load(os.path.join(path, name))
-        if name[-4:].lower() == ".dds":
-            pixels = list(img.pixels[:])
-            rowlen = img.size[0] * 4
-            height = img.size[1]
-            for y in range(int(height/2)):
-                ind1 = y * rowlen
-                ind2 = (height - 1 - y) * rowlen
-                t = pixels[ind1 : ind1 + rowlen]
-                pixels[ind1:ind1+rowlen] = pixels[ind2:ind2+rowlen]
-                pixels[ind2:ind2+rowlen] = t
-            if name[-6:-4] == "_n":
-                pixels = convert_bump(pixels, img.size[0], height)
-            img.pixels = pixels[:]
+    # DDS files are not supported for now
+    # elif name[-4:].lower() == ".dds":
+    #     img = bpy.data.images.load(os.path.join(path, name))
+    #     load_dds(img)
     elif name[-4:].lower() == ".mbm":
         w,h, pixels = load_mbm(os.path.join(path, name))
         img = bpy.data.images.new(name, w, h)
         img.pixels[:] = map(lambda x: x / 255.0, pixels)
-        img.pack(True)
+
+    # Pack image and change filepath to avoid texture overriding
+    img.pack(True)
+    img.filepath = img_path
 
 def create_textures(mu, path):
-    extensions = [".dds", ".mbm", ".tga", ".png"]
+    # Note: DDS textures are previously converted to .png in exporter
+    # so here the extension saved in .mu is not the good one
+    extensions = [".png" ,".dds", ".mbm", ".tga"]
     #texture info is in the top level object
     for tex in mu.textures:
-        base, ext = os.path.splitext(tex.name)
-        ind = 0
-        if ext in extensions:
-            ind = extensions.index(ext)
-        lst = extensions[ind:] + extensions[:ind]
-        for e in lst:
-            try:
-                name = base+e
+        base = os.path.splitext(tex.name)[0]
+        for e in extensions:
+            name = base + e
+            texture_path = os.path.join(path, name)
+            if os.path.exists(texture_path):
                 load_image(name, path)
                 tx = bpy.data.textures.new(tex.name, 'IMAGE')
                 tx.use_preview_alpha = True
                 tx.image = bpy.data.images[name]
                 break
-            except FileNotFoundError:
-                continue
-            except RuntimeError:
-                continue
     pass
 
 def add_texture(mu, mat, mattex):
