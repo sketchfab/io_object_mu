@@ -36,6 +36,8 @@ from .shader import make_shader
 from .material import make_material
 from . import collider, properties
 
+EXCLUDED_OBJECTS=['flare', 'busted']
+
 def create_uvs(mu, uvs, mesh, name):
     uvlay = mesh.uv_textures.new(name)
     uvloop = mesh.uv_layers[name]
@@ -219,8 +221,17 @@ def create_collider(mu, muobj):
     return obj
 
 def create_object(mu, muobj, parent, create_colliders, parents):
+    def isExcludedObject(muobj):
+        for obj in EXCLUDED_OBJECTS:
+            if obj in muobj.transform.name.lower():
+                return True
+        return False
+
     obj = None
     mesh = None
+    if isExcludedObject(muobj):
+        return None
+
     if hasattr(muobj, "shared_mesh"):
         mesh = create_mesh(mu, muobj.shared_mesh, muobj.transform.name)
         for poly in mesh.polygons:

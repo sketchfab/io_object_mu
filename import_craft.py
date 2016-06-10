@@ -11,10 +11,10 @@ def print_blender_data_stats(label):
     nbtex = len(bpy.data.textures)
     nbimg = len(bpy.data.images)
 
-    print ('Loading stats ({}) :\
-            \n - {} objects \n - {} materials \
-            \n - {} textures \n - {} images \
-            \n'.format(label, nbobj, nbmat, nbtex, nbimg))
+    print ('Loading stats ({}) :'
+           '\n - {} objects \n - {} materials'
+           '\n - {} textures \n - {} images'
+           '\n'.format(label, nbobj, nbmat, nbtex, nbimg))
 
 
 def rename_textures(ob):
