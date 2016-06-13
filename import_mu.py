@@ -36,7 +36,7 @@ from .shader import make_shader
 from .material import make_material
 from . import collider, properties
 
-EXCLUDED_OBJECTS=['flare', 'busted']
+EXCLUDED_OBJECTS=['flare', 'busted', 'flag']
 
 def create_uvs(mu, uvs, mesh, name):
     uvlay = mesh.uv_textures.new(name)
