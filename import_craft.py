@@ -1,7 +1,7 @@
 import os
 import bpy
-import import_mu
-from cfgnode import ConfigNode
+from . import import_mu
+from .cfgnode import ConfigNode
 VERBOSE = True
 
 
@@ -11,10 +11,10 @@ def print_blender_data_stats(label):
     nbtex = len(bpy.data.textures)
     nbimg = len(bpy.data.images)
 
-    print ('Loading stats ({}) :\
-            \n - {} objects \n - {} materials \
-            \n - {} textures \n - {} images \
-            \n'.format(label, nbobj, nbmat, nbtex, nbimg))
+    print ('Loading stats ({}) :'
+           '\n - {} objects \n - {} materials'
+           '\n - {} textures \n - {} images'
+           '\n'.format(label, nbobj, nbmat, nbtex, nbimg))
 
 
 def rename_textures(ob):
@@ -128,11 +128,10 @@ class CraftReader(object):
                 # Need to come back to OBJECT mode to avoid context error
                 bpy.ops.object.mode_set(mode='OBJECT')
 
-    def read_parts_models(self, prefabs_dict, colliders):
+    def read_parts_models(self, prefabs_dict, colliders, use_classic_material):
         for part in prefabs_dict.values():
             unselect_all_objects()
-
-            result = import_mu.import_mu(self, bpy.context, part['mu'], False)
+            result = import_mu.import_mu(self, bpy.context, part['mu'], False, use_classic_material)
             if not result == {'FINISHED'}:
                 print('Warning: Error while importing file {}'.format(os.path.basename(part['mu'])))
                 continue
@@ -336,7 +335,7 @@ def check_parts_in_directory(directory):
     return parts_files
 
 
-def import_craft(context, craft_file_path, colliders):
+def import_craft(context, craft_file_path, colliders, use_classic_material=False):
     ''' Read a.craft file, retrieve .mu parts and build the ship'''
 
     colliders = False
@@ -352,7 +351,7 @@ def import_craft(context, craft_file_path, colliders):
             used_parts_files[partfile] = available_parts_files[partfile]
 
     # Read mu files
-    creader.read_parts_models(used_parts_files, colliders)
+    creader.read_parts_models(used_parts_files, colliders, use_classic_material)
 
     print('INFO : {} were found \n  - {} were used\
            \n  - The final ship has {} parts'.format(len(available_parts_files),

@@ -25,12 +25,19 @@ from bpy.props import BoolVectorProperty, CollectionProperty, PointerProperty
 from bpy.props import FloatVectorProperty, IntProperty
 from mathutils import Vector,Matrix,Quaternion
 
-from mu import MuEnum
+from .mu import MuEnum
 
 class MuSpringProp(bpy.types.PropertyGroup):
     spring = FloatProperty(name = "Spring")
     damper = FloatProperty(name = "Damper")
     targetPosition = FloatProperty(name = "Target")
+
+    def draw(self, context, layout):
+        row = layout.row()
+        col = row.column()
+        col.prop(self, "spring")
+        col.prop(self, "damper")
+        col.prop(self, "targetPosition")
 
 class MuFrictionProp(bpy.types.PropertyGroup):
     extremumSlip = FloatProperty(name = "Slip")
@@ -38,6 +45,18 @@ class MuFrictionProp(bpy.types.PropertyGroup):
     asymptoteSlip = FloatProperty(name = "Slip")
     asymptoteValue = FloatProperty(name = "Value")
     stiffness = FloatProperty(name = "Stiffness")
+
+    def draw(self, context, layout):
+        row = layout.row()
+        col = row.column()
+        col.label("Extremum")
+        col.prop(self, "extremumSlip")
+        col.prop(self, "extremumValue")
+        col.label("Asymptote")
+        col.prop(self, "asymptoteSlip")
+        col.prop(self, "asymptoteValue")
+        col.separator()
+        col.prop(self, "stiffness")
 
 dir_map = {
     'MU_X':0,
@@ -71,21 +90,29 @@ def GetPropMask(prop):
         mask |= int(prop[i]) << i;
     return mask
 
+def collider_update(self, context):
+    from .collider import update_collider
+    obj = context.active_object
+    update_collider(obj)
+
 class MuProperties(bpy.types.PropertyGroup):
     tag = StringProperty(name = "Tag", default="Untagged")
     layer = IntProperty(name = "Layer")
+
     collider = EnumProperty(items = collider_items, name = "Collider")
-    isTrigger = BoolProperty(name = "Trigger")
-    center = FloatVectorProperty(name = "Center", subtype = 'XYZ')
-    radius = FloatProperty(name = "Radius")
-    height = FloatProperty(name = "Height")
-    direction = EnumProperty(items = dir_items, name = "Direction")
-    size = FloatVectorProperty(name = "Size", subtype = 'XYZ')
+    isTrigger = BoolProperty(name = "Trigger", update=collider_update)
+    center = FloatVectorProperty(name = "Center", subtype = 'XYZ', update=collider_update)
+    radius = FloatProperty(name = "Radius", update=collider_update)
+    height = FloatProperty(name = "Height", update=collider_update)
+    direction = EnumProperty(items = dir_items, name = "Direction", update=collider_update)
+    size = FloatVectorProperty(name = "Size", subtype = 'XYZ', update=collider_update)
+
     mass = FloatProperty(name = "Mass")
     suspensionDistance = FloatProperty(name = "Distance")
     suspensionSpring = PointerProperty(type=MuSpringProp, name = "Spring")
     forwardFriction = PointerProperty(type=MuFrictionProp, name = "Forward")
     sideFriction = PointerProperty(type=MuFrictionProp, name = "Sideways")
+
     cullingMask = BoolVectorProperty(size=32, name = "Mask", subtype = 'LAYER')
 
 class MuPropertiesPanel(bpy.types.Panel):
@@ -150,12 +177,19 @@ class MuColliderPanel(bpy.types.Panel):
             col.prop(muprops, "isTrigger")
             col.prop(muprops, "radius")
             col.prop(muprops, "center")
+            col.prop(muprops, "mass")
             col.prop(muprops, "suspensionDistance")
+            box = col.box()
+            box.label("Suspension")
+            muprops.suspensionSpring.draw(context, box)
+            box = col.box()
+            box.label("Forward Friction")
+            muprops.forwardFriction.draw(context, box.box())
+            box = col.box()
+            box.label("Side Friction")
+            muprops.sideFriction.draw(context, box.box())
 
 def register():
-    bpy.utils.register_class(MuSpringProp)
-    bpy.utils.register_class(MuFrictionProp)
-    bpy.utils.register_class(MuProperties)
     bpy.types.Object.muproperties = PointerProperty(type=MuProperties)
 
 def unregister():

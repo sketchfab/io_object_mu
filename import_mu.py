@@ -21,16 +21,22 @@
 
 from struct import unpack
 import os.path
-from math import pi
+from math import pi, sqrt
 
 import bpy
 from bpy_extras.object_utils import object_data_add
 from mathutils import Vector,Matrix,Quaternion
+from bpy_extras.io_utils import ImportHelper
+from bpy.props import BoolProperty, FloatProperty, StringProperty, EnumProperty
+from bpy.props import FloatVectorProperty, PointerProperty
 
-from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
-from mu import MuColliderBox, MuColliderWheel
-from shader import make_material
-import collider, properties
+from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
+from .mu import MuColliderBox, MuColliderWheel
+from .shader import make_shader
+from .material import make_material
+from . import collider, properties
+
+EXCLUDED_OBJECTS=['flare', 'busted', 'flag']
 
 def create_uvs(mu, uvs, mesh, name):
     uvlay = mesh.uv_textures.new(name)
@@ -99,65 +105,78 @@ def create_light(mu, mulight, transform):
     return obj
 
 property_map = {
-    "m_LocalPosition.x": ("location", 0, 1),
-    "m_LocalPosition.y": ("location", 2, 1),
-    "m_LocalPosition.z": ("location", 1, 1),
-    "m_LocalRotation.x": ("rotation_quaternion", 1, -1),
-    "m_LocalRotation.y": ("rotation_quaternion", 3, -1),
-    "m_LocalRotation.z": ("rotation_quaternion", 2, -1),
-    "m_LocalRotation.w": ("rotation_quaternion", 0, 1),
-    "m_LocalScale.x": ("scale", 0, 1),
-    "m_LocalScale.y": ("scale", 2, 1),
-    "m_LocalScale.z": ("scale", 1, 1),
+    "m_LocalPosition.x": ("obj", "location", 0, 1),
+    "m_LocalPosition.y": ("obj", "location", 2, 1),
+    "m_LocalPosition.z": ("obj", "location", 1, 1),
+    "m_LocalRotation.x": ("obj", "rotation_quaternion", 1, -1),
+    "m_LocalRotation.y": ("obj", "rotation_quaternion", 3, -1),
+    "m_LocalRotation.z": ("obj", "rotation_quaternion", 2, -1),
+    "m_LocalRotation.w": ("obj", "rotation_quaternion", 0, 1),
+    "m_LocalScale.x": ("obj", "scale", 0, 1),
+    "m_LocalScale.y": ("obj", "scale", 2, 1),
+    "m_LocalScale.z": ("obj", "scale", 1, 1),
+    "m_Intensity": ("data", "energy", 0, 1),
 }
 
-def create_action(mu, path, clip):
-    act = bpy.data.actions.new(clip.name)
-    actions = {}
+def create_fcurve(action, curve, propmap):
+    dp, ind, mult = propmap
     fps = bpy.context.scene.render.fps
+    fc = action.fcurves.new(data_path = dp, index = ind)
+    fc.keyframe_points.add(len(curve.keys))
+    for i, key in enumerate(curve.keys):
+        x,y = key.time * fps, key.value * mult
+        fc.keyframe_points[i].co = x, y
+        fc.keyframe_points[i].handle_left_type = 'FREE'
+        fc.keyframe_points[i].handle_right_type = 'FREE'
+        if i > 0:
+            dist = (key.time - curve.keys[i - 1].time) / 3
+            dx, dy = dist * fps, key.tangent[0] * dist * mult
+        else:
+            dx, dy = 10, 0.0
+        fc.keyframe_points[i].handle_left = x - dx, y - dy
+        if i < len(curve.keys) - 1:
+            dist = (curve.keys[i + 1].time - key.time) / 3
+            dx, dy = dist * fps, key.tangent[1] * dist * mult
+        else:
+            dx, dy = 10, 0.0
+        fc.keyframe_points[i].handle_right = x + dx, y + dy
+    return True
+
+def create_action(mu, path, clip):
+    #print(clip.name)
+    actions = {}
     for curve in clip.curves:
         if not curve.path:
-            #FIXME need to look into this more as I'm not sure if the animation
-            # is broken or if the property is somewhere weird
+            mu_path = path
+        else:
+            mu_path = "/".join([path, curve.path])
+        if mu_path not in mu.objects:
+            print("Unknown path: %s" % (mu_path))
             continue
-        name = ".".join([curve.path, clip.name])
+        obj = mu.objects[mu_path]
+
+        if curve.property not in property_map:
+            print("%s: Unknown property: %s" % (mu_path, curve.property))
+            continue
+        propmap = property_map[curve.property]
+        subpath, propmap = propmap[0], propmap[1:]
+
+        if subpath != "obj":
+            obj = getattr (obj, subpath)
+
+        name = ".".join([clip.name, curve.path, subpath])
         if name not in actions:
-            actions[name] = bpy.data.actions.new(name)
-        act = actions[name]
-        pth = "/".join([path, curve.path])
-        try:
-            obj = mu.objects[pth]
-        except KeyError:
-            print("Unknown path: %s" % (pth))
+            actions[name] = bpy.data.actions.new(name), obj
+        act, obj = actions[name]
+        if not create_fcurve(act, curve, propmap):
             continue
-        try:
-            dp, ind, mult = property_map[curve.property]
-        except KeyError:
-            print("%s: Unknown property: %s" % (curve.path, curve.property))
-            continue
-        fc = act.fcurves.new(data_path = dp, index = ind)
-        fc.keyframe_points.add(len(curve.keys))
-        for i, key in enumerate(curve.keys):
-            x,y = key.time * fps, key.value * mult
-            fc.keyframe_points[i].co = x, y
-            fc.keyframe_points[i].handle_left_type = 'FREE'
-            fc.keyframe_points[i].handle_right_type = 'FREE'
-            if i > 0:
-                dist = (key.time - curve.keys[i - 1].time) / 3
-                dx, dy = dist * fps, key.tangent[0] * dist * mult
-            else:
-                dx, dy = 10, 0.0
-            fc.keyframe_points[i].handle_left = x - dx, y - dy
-            if i < len(curve.keys) - 1:
-                dist = (curve.keys[i + 1].time - key.time) / 3
-                dx, dy = dist * fps, key.tangent[1] * dist * mult
-            else:
-                dx, dy = 10, 0.0
-            fc.keyframe_points[i].handle_right = x + dx, y + dy
+    for name in actions:
+        act, obj = actions[name]
         if not obj.animation_data:
             obj.animation_data_create()
-            track = obj.animation_data.nla_tracks.new()
-            track.strips.new(act.name, 1.0, act)
+        track = obj.animation_data.nla_tracks.new()
+        track.name = clip.name
+        track.strips.new(act.name, 1.0, act)
 
 def create_collider(mu, muobj):
     col = muobj.collider
@@ -165,15 +184,8 @@ def create_collider(mu, muobj):
     if type(col) == MuColliderMesh:
         name = name + ".collider"
         mesh = create_mesh(mu, col.mesh, name)
-    elif type(col) == MuColliderSphere:
-        mesh = collider.sphere(name, col.center, col.radius)
-    elif type(col) == MuColliderCapsule:
-        mesh = collider.capsule(name, col.center, col.radius, col.height,
-                                col.direction)
-    elif type(col) == MuColliderBox:
-        mesh = collider.box(name, col.center, col.size)
-    elif type(col) == MuColliderWheel:
-        mesh = collider.wheel(name, col.center, col.radius)
+    else:
+        mesh = bpy.data.meshes.new(name)
     obj = create_mesh_object(name, mesh, None)
 
     obj.muproperties.isTrigger = False
@@ -182,35 +194,57 @@ def create_collider(mu, muobj):
     if type(col) == MuColliderMesh:
         obj.muproperties.collider = 'MU_COL_MESH'
     elif type(col) == MuColliderSphere:
-        obj.muproperties.collider = 'MU_COL_SPHERE'
         obj.muproperties.radius = col.radius
         obj.muproperties.center = col.center
+        obj.muproperties.collider = 'MU_COL_SPHERE'
     elif type(col) == MuColliderCapsule:
-        obj.muproperties.collider = 'MU_COL_CAPSULE'
         obj.muproperties.radius = col.radius
         obj.muproperties.height = col.height
         obj.muproperties.direction = properties.dir_map[col.direction]
         obj.muproperties.center = col.center
+        obj.muproperties.collider = 'MU_COL_CAPSULE'
     elif type(col) == MuColliderBox:
-        obj.muproperties.collider = 'MU_COL_BOX'
         obj.muproperties.size = col.size
         obj.muproperties.center = col.center
+        obj.muproperties.collider = 'MU_COL_BOX'
     elif type(col) == MuColliderWheel:
-        obj.muproperties.collider = 'MU_COL_WHEEL'
         obj.muproperties.radius = col.radius
         obj.muproperties.suspensionDistance = col.suspensionDistance
         obj.muproperties.center = col.center
+        obj.muproperties.mass = col.mass
         copy_spring(obj.muproperties.suspensionSpring, col.suspensionSpring)
         copy_friction(obj.muproperties.forwardFriction, col.forwardFriction)
         copy_friction(obj.muproperties.sideFriction, col.sidewaysFriction)
+        obj.muproperties.collider = 'MU_COL_WHEEL'
+    if type(col) != MuColliderMesh:
+        collider.build_collider(obj)
     return obj
 
 def create_object(mu, muobj, parent, create_colliders, parents):
+    def isExcludedObject(muobj):
+        for obj in EXCLUDED_OBJECTS:
+            if obj in muobj.transform.name.lower():
+                return True
+        return False
+
     obj = None
     mesh = None
+    if isExcludedObject(muobj):
+        return None
+
     if hasattr(muobj, "shared_mesh"):
         mesh = create_mesh(mu, muobj.shared_mesh, muobj.transform.name)
+        for poly in mesh.polygons:
+            poly.use_smooth = True
         obj = create_mesh_object(muobj.transform.name, mesh, muobj.transform)
+    elif hasattr(muobj, "skinned_mesh_renderer"):
+        smr = muobj.skinned_mesh_renderer
+        mesh = create_mesh(mu, smr.mesh, muobj.transform.name)
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+        obj = create_mesh_object(muobj.transform.name, mesh, muobj.transform)
+        mumat = mu.materials[smr.materials[0]]
+        mesh.materials.append(mumat.material)
     if hasattr(muobj, "renderer"):
         if mesh:
             mumat = mu.materials[muobj.renderer.materials[0]]
@@ -242,16 +276,13 @@ def convert_bump(pixels, width, height):
     outp = list(pixels)
     for y in range(1, height - 1):
         for x in range(1, width - 1):
-            i = ((y * width + x) * 4,
-                 (y * width + x - 1) * 4,
-                 (y * width + x + 1) * 4,
-                 ((y - 1) * width + x) * 4,
-                 ((y + 1) * width + x) * 4)
-            dx = Vector((1, 0, (pixels[i[2]] - pixels[i[1]]) / 2.0))
-            dy = Vector((0, 1, (pixels[i[4]] - pixels[i[3]]) / 2.0))
-            n = dx.cross(dy)
-            n.normalize()
-            outp[i[0]:i[0]+3] = map(lambda x: int(x * 127) + 128, list(n))
+            index = (y * width + x) * 4
+            p = pixels[index:index + 4]
+            nx = (p[3]-128) / 127.
+            nz = (p[2]-128) / 127.
+            #n = [p[3],p[2],int(sqrt(1-nx**2-nz**2)*127 + 128),255]
+            n = [p[3],p[2],255,255]
+            outp[index:index + 4] = n
     return outp
 
 
@@ -275,48 +306,59 @@ def load_mbm(mbmpath):
         pixels = convert_bump(pixels, width, height)
     return width, height, pixels
 
-def load_image(name, path):
-    if name[-4:].lower() in [".png", ".tga"]:
-        img_path = os.path.join(path, name)
-        if any(name == os.path.basename(packed_img.filepath) \
-               for packed_img in bpy.data.images):
-            # Add the directory name between the file name and the extension
-            basename, ext = os.path.splitext(img_path)
-            img_path = basename  + os.path.split(path)[-1] + ext
-        img = bpy.data.images.load(os.path.join(path, name))
-        img.pack(True)
-        # We don't want images whose file have the same name since they are
-        # overriden when being unpacked. So we rename them in this case
-        # by adding the directory name
-        img.filepath = img_path
+def load_dds(dds_image):
+    pixels = list(img.pixels[:])
+    rowlen = img.size[0] * 4
+    height = img.size[1]
+    for y in range(int(height/2)):
+        ind1 = y * rowlen
+        ind2 = (height - 1 - y) * rowlen
+        t = pixels[ind1 : ind1 + rowlen]
+        pixels[ind1:ind1+rowlen] = pixels[ind2:ind2+rowlen]
+        pixels[ind2:ind2+rowlen] = t
+    if name[-6:-4] == "_n":
+        pixels = convert_bump(pixels, img.size[0], height)
+    img.pixels = pixels[:]
 
+def load_image(name, path):
+    img_path = os.path.join(path, name)
+    if any(name == os.path.basename(packed_img.filepath) \
+       for packed_img in bpy.data.images):
+        # Add the directory name between the file name and the extension
+        basename, ext = os.path.splitext(name)
+        img_path = basename  + os.path.split(path)[-1] + ext
+
+    if name[-4:].lower() in [".png", ".tga"]:
+        img = bpy.data.images.load(os.path.join(path, name))
+    # DDS files are not supported for now
+    # elif name[-4:].lower() == ".dds":
+    #     img = bpy.data.images.load(os.path.join(path, name))
+    #     load_dds(img)
     elif name[-4:].lower() == ".mbm":
         w,h, pixels = load_mbm(os.path.join(path, name))
         img = bpy.data.images.new(name, w, h)
         img.pixels[:] = map(lambda x: x / 255.0, pixels)
-        img.pack(True)
+
+    # Pack image and change filepath to avoid texture overriding
+    img.pack(True)
+    img.filepath = img_path
 
 def create_textures(mu, path):
-    extensions = [".mbm", ".tga", ".png"]
+    # Note: DDS textures are previously converted to .png in exporter
+    # so here the extension saved in .mu is not the good one
+    extensions = [".png" ,".dds", ".mbm", ".tga"]
     #texture info is in the top level object
     for tex in mu.textures:
-        base, ext = os.path.splitext(tex.name)
-        ind = 0
-        if ext in extensions:
-            ind = extensions.index(ext)
-        lst = extensions[ind:] + extensions[:ind]
-        for e in lst:
-            try:
-                name = base+e
+        base = os.path.splitext(tex.name)[0]
+        for e in extensions:
+            name = base + e
+            texture_path = os.path.join(path, name)
+            if os.path.exists(texture_path):
                 load_image(name, path)
                 tx = bpy.data.textures.new(tex.name, 'IMAGE')
                 tx.use_preview_alpha = True
                 tx.image = bpy.data.images[name]
                 break
-            except FileNotFoundError:
-                continue
-            except RuntimeError:
-                continue
     pass
 
 def add_texture(mu, mat, mattex):
@@ -329,12 +371,15 @@ def add_texture(mu, mat, mattex):
     ts.scale = s + (1,)
     ts.offset = o + (0,)
 
-def create_materials(mu):
+def create_materials(mu, use_classic=False):
     #material info is in the top level object
     for mumat in mu.materials:
-        mumat.material = make_material(mumat, mu.textures)
+        if(use_classic):
+            mumat.material = make_material(mumat, mu)
+        else:
+            mumat.material = make_shader(mumat, mu)
 
-def import_mu(self, context, filepath, create_colliders):
+def import_mu(self, context, filepath, create_colliders, use_classic_material=False):
     operator = self
     undo = bpy.context.user_preferences.edit.use_global_undo
     bpy.context.user_preferences.edit.use_global_undo = False
@@ -343,21 +388,36 @@ def import_mu(self, context, filepath, create_colliders):
         obj.select = False
 
     mu = Mu()
-    try:
-        if not mu.read(filepath):
-            operator.report({'ERROR'},
-                "Unrecognized format: %s %d" % (mu.magic, mu.version))
-            return {'CANCELLED'}
-
-        create_textures(mu, os.path.dirname(filepath))
-        create_materials(mu)
-        mu.objects = {}
-        obj = create_object(mu, mu.obj, None, create_colliders, [])
-        bpy.context.scene.objects.active = obj
-        obj.select = True
-
+    if not mu.read(filepath):
         bpy.context.user_preferences.edit.use_global_undo = undo
-        return {'FINISHED'}
-    except EOFError:
+        operator.report({'ERROR'},
+            "Unrecognized format: %s %d" % (mu.magic, mu.version))
         return {'CANCELLED'}
 
+    create_textures(mu, os.path.dirname(filepath))
+    create_materials(mu, use_classic_material)
+    mu.objects = {}
+    obj = create_object(mu, mu.obj, None, create_colliders, [])
+    bpy.context.scene.objects.active = obj
+    obj.select = True
+
+    bpy.context.user_preferences.edit.use_global_undo = undo
+    return {'FINISHED'}
+
+class ImportMu(bpy.types.Operator, ImportHelper):
+    '''Load a KSP Mu (.mu) File'''
+    bl_idname = "import_object.ksp_mu"
+    bl_label = "Import Mu"
+    bl_description = """Import a KSP .mu model."""
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filename_ext = ".mu"
+    filter_glob = StringProperty(default="*.mu", options={'HIDDEN'})
+
+    create_colliders = BoolProperty(name="Create Colliders",
+            description="Disable to import only visual and hierarchy elements",
+                                    default=True)
+
+    def execute(self, context):
+        keywords = self.as_keywords (ignore=("filter_glob",))
+        return import_mu(self, context, **keywords)

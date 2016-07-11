@@ -23,13 +23,17 @@ import bpy, bmesh
 from bpy_extras.object_utils import object_data_add
 from mathutils import Vector,Matrix,Quaternion
 from pprint import pprint
+from bpy_extras.io_utils import ExportHelper
+from bpy.props import BoolProperty, FloatProperty, StringProperty, EnumProperty
+from bpy.props import FloatVectorProperty, PointerProperty
 
-from mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
-from mu import MuObject, MuTransform, MuMesh, MuTagLayer, MuRenderer
-from mu import MuColliderBox, MuColliderWheel, MuMaterial, MuTexture, MuMatTex
-from mu import MuSpring, MuFriction
-from shader import make_shader
-import properties
+from .mu import MuEnum, Mu, MuColliderMesh, MuColliderSphere, MuColliderCapsule
+from .mu import MuObject, MuTransform, MuMesh, MuTagLayer, MuRenderer, MuLight
+from .mu import MuColliderBox, MuColliderWheel, MuMaterial, MuTexture, MuMatTex
+from .mu import MuSpring, MuFriction
+from .mu import MuAnimation, MuClip, MuCurve, MuKey
+from .shader import make_shader
+from . import properties
 
 def strip_nnn(name):
     ind = name.rfind(".")
@@ -43,7 +47,10 @@ def make_transform(obj):
     transform = MuTransform()
     transform.name = strip_nnn(obj.name)
     transform.localPosition = obj.location
-    transform.localRotation = obj.rotation_quaternion
+    if obj.rotation_mode != 'QUATERNION':
+      transform.localRotation = obj.rotation_euler.to_quaternion()
+    else:
+      transform.localRotation = obj.rotation_quaternion
     transform.localScale = obj.scale
     return transform
 
@@ -214,76 +221,45 @@ def make_tag_and_layer(obj):
     tl.layer = obj.muproperties.layer
     return tl
 
-def make_texture(mu, tex, type):
+def make_texture(mu, tex):
     if tex.tex not in mu.textures:
         mutex = MuTexture()
         mutex.name = tex.tex
-        mutex.type = type
+        mutex.type = tex.type
         mutex.index = len(mu.textures)
         mu.textures[tex.tex] = mutex
     mattex = MuMatTex()
     mattex.index = mu.textures[tex.tex].index
-    mattex.scale = tex.scale
-    mattex.offset = tex.offset
+    mattex.scale = list(tex.scale)
+    mattex.offset = list(tex.offset)
     return mattex
+
+def make_property(blendprop):
+    muprop = {}
+    for item in blendprop:
+        if type(item.value) is float:
+            muprop[item.name] = item.value
+        else:
+            muprop[item.name] = list(item.value)
+    return muprop
+
+def make_tex_property(mu, blendprop):
+    muprop = {}
+    for item in blendprop:
+        muprop[item.name] = make_texture(mu, item)
+    return muprop
 
 def make_material(mu, mat):
     material = MuMaterial()
     material.name = mat.name
     material.index = len(mu.materials)
     matprops = mat.mumatprop
-    material.type = MuEnum.ShaderNames.index(matprops.shader)
-    if matprops.shader == 'KSP/Specular':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.specColor = matprops.specColor
-        material.shininess = matprops.shininess
-    elif matprops.shader == 'KSP/Bumped':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.bumpMap = make_texture(mu, matprops.bumpMap, 1)
-    elif matprops.shader == 'KSP/Bumped Specular':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.bumpMap = make_texture(mu, matprops.bumpMap, 1)
-        material.specColor = matprops.specColor
-        material.shininess = matprops.shininess
-    elif matprops.shader == 'KSP/Emissive/Diffuse':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.emissive = make_texture(mu, matprops.emissive, 0)
-        material.emissiveColor = matprops.emissiveColor
-    elif matprops.shader == 'KSP/Emissive/Specular':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.specColor = matprops.specColor
-        material.shininess = matprops.shininess
-        material.emissive = make_texture(mu, matprops.emissive, 0)
-        material.emissiveColor = matprops.emissiveColor
-    elif matprops.shader == 'KSP/Emissive/Bumped Specular':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.bumpMap = make_texture(mu, matprops.bumpMap, 1)
-        material.specColor = matprops.specColor
-        material.shininess = matprops.shininess
-        material.emissive = make_texture(mu, matprops.emissive, 0)
-        material.emissiveColor = matprops.emissiveColor
-    elif matprops.shader == 'KSP/Alpha/Cutoff':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.cutoff = matprops.cutoff
-    elif matprops.shader == 'KSP/Alpha/Cutoff Bumped':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.bumpMap = make_texture(mu, matprops.bumpMap, 1)
-        material.cutoff = matprops.cutoff
-    elif matprops.shader == 'KSP/Alpha/Translucent':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-    elif matprops.shader == 'KSP/Alpha/Translucent Specular':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.gloss = matprops.gloss
-        material.specColor = matprops.specColor
-        material.shininess = matprops.shininess
-    elif matprops.shader == 'KSP/Alpha/Unlit Transparent':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.color = matprops.color
-    elif matprops.shader == 'KSP/Unlit':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
-        material.color = matprops.color
-    elif matprops.shader == 'KSP/Diffuse':
-        material.mainTex = make_texture(mu, matprops.mainTex, 0)
+    material.shaderName = matprops.shaderName
+    material.colorProperties = make_property(matprops.color.properties)
+    material.vectorProperties = make_property(matprops.vector.properties)
+    material.floatProperties2 = make_property(matprops.float2.properties)
+    material.floatProperties3 = make_property(matprops.float3.properties)
+    material.textureProperties = make_tex_property(mu, matprops.texture.properties)
     return material
 
 def make_renderer(mu, mesh):
@@ -291,13 +267,13 @@ def make_renderer(mu, mesh):
     #FIXME shadows
     rend.materials = []
     for mat in mesh.materials:
-        if mat.mumatprop.shader:
+        if mat.mumatprop.shaderName:
             if mat.name not in mu.materials:
                 mu.materials[mat.name] = make_material(mu, mat)
             rend.materials.append(mu.materials[mat.name].index)
     return rend
 
-def make_light(mu, light):
+def make_light(mu, light, obj):
     mulight = MuLight()
     mulight.type = ('SPOT', 'SUN', 'POINT', 'AREA').index(light.type)
     mulight.color = tuple(light.color) + (1.0,)
@@ -309,9 +285,23 @@ def make_light(mu, light):
         mulight.spotAngle = light.spot_size * 180 / pi
     return mulight
 
-def make_obj(mu, obj):
+light_types = {
+    bpy.types.PointLamp,
+    bpy.types.SunLamp,
+    bpy.types.SpotLamp,
+    bpy.types.HemiLamp,
+    bpy.types.AreaLamp
+}
+
+exportable_types = {bpy.types.Mesh} | light_types
+
+def make_obj(mu, obj, path = ""):
     muobj = MuObject()
     muobj.transform = make_transform (obj)
+    if path:
+        path += "/"
+    path += muobj.transform.name
+    mu.objects[path] = muobj
     muobj.tag_and_layer = make_tag_and_layer(obj)
     if obj.muproperties.collider and obj.muproperties.collider != 'MU_COL_NONE':
         # colliders are children of the object representing the transform so
@@ -321,30 +311,135 @@ def make_obj(mu, obj):
         if type(obj.data) == bpy.types.Mesh:
             muobj.shared_mesh = make_mesh(mu, obj)
             muobj.renderer = make_renderer(mu, obj.data)
-        elif type(obj.data) in [bpy.types.PointLamp,
-                                bpy.types.SunLamp,
-                                bpy.types.SpotLamp,
-                                bpy.types.HemiLamp,
-                                bpy.types.AreaLamp]:
-            muobj.light = make_light(mu, obj.data)
+        elif type(obj.data) in light_types:
+            muobj.light = make_light(mu, obj.data, obj)
             # Blender points spotlights along local -Z, unity along local +Z
             # which is Blender's +Y, so rotate -90 degrees around local X to
             # go from Blender to Unity
             rot = Quaternion((0.5**0.5,-0.5**0.5,0,0))
-            muobj.transform = rot * muobj.transform
+            muobj.transform.localRotation = rot * muobj.transform.localRotation
     for o in obj.children:
         muprops = o.muproperties
         if muprops.collider and muprops.collider != 'MU_COL_NONE':
             muobj.collider = make_collider(mu, o)
             continue
-        if (o.data and type(o.data) != bpy.types.Mesh):
+        if (o.data and type(o.data) not in exportable_types):
             continue
-        muobj.children.append(make_obj(mu, o))
+        muobj.children.append(make_obj(mu, o, path))
     return muobj
 
-def export_mu(operator, context, filepath):
-    obj = context.active_object
+def collect_animations(obj, path=""):
+    animations = {}
+    if path:
+        path += "/"
+    path += strip_nnn(obj.name)
+    if obj.animation_data:
+        for track in obj.animation_data.nla_tracks:
+            if track.strips:
+                animations[track.name] = [(track, path)]
+    for o in obj.children:
+        sub_animations = collect_animations(o, path)
+        for sa in sub_animations:
+            if sa not in animations:
+                animations[sa] = sub_animations[sa]
+            else:
+                animations[sa].extend(sub_animations[sa])
+    return animations
+
+def find_path_root(animations):
+    paths = {}
+    for clip in animations:
+        for data in animations[clip]:
+            objects = data[1].split("/")
+            p = paths
+            for o in objects:
+                if not o in p:
+                    p[o] = {}
+                p = p[o]
+    path_root = ""
+    p = paths
+    while len(p) == 1:
+        if path_root:
+            path_root += "/"
+        o = list(p)[0]
+        path_root += o
+        p = p[o]
+    return path_root
+
+def make_key(key, mult):
+    fps = bpy.context.scene.render.fps
+    mukey = MuKey()
+    x, y = key.co
+    x -= bpy.context.scene.frame_start
+    mukey.time = x / fps
+    mukey.value = y * mult
+    dx, dy = key.handle_left
+    dx = (x - dx) / fps
+    dy = (y - dy) * mult
+    t1 = dy / dx
+    dx, dy = key.handle_right
+    dx = (dx - x) / fps
+    dy = (dy - y) * mult
+    t2 = dy / dx
+    mukey.tangent = t1, t2
+    mukey.tangentMode = 0
+    return mukey
+
+property_map = {
+    "location":(
+        ("m_LocalPosition.x", 1),
+        ("m_LocalPosition.z", 1),
+        ("m_LocalPosition.y", 1),
+    ),
+    "rotation_quaternion":(
+        ("m_LocalRotation.w", 1),
+        ("m_LocalRotation.x", -1),
+        ("m_LocalRotation.z", -1),
+        ("m_LocalRotation.y", -1),
+    ),
+    "scale":(
+        ("m_LocalScale.x", 1),
+        ("m_LocalScale.z", 1),
+        ("m_LocalScale.y", 1),
+    ),
+}
+
+def make_curve(mu, curve, path):
+    mucurve = MuCurve()
+    mucurve.path = path
+    property, mult = property_map[curve.data_path][curve.array_index]
+    mucurve.property = property
+    mucurve.type = 0
+    mucurve.wrapMode = (8, 8)
+    mucurve.keys = []
+    for key in curve.keyframe_points:
+        mucurve.keys.append(make_key(key, mult))
+    return mucurve
+
+def make_animations(mu, animations, anim_root):
+    anim = MuAnimation()
+    anim.clip = ""
+    anim.autoPlay = False
+    for clip_name in animations:
+        clip = MuClip()
+        clip.name = clip_name
+        clip.lbCenter = (0, 0, 0)
+        clip.lbSize = (0, 0, 0)
+        clip.wrapMode = 0   #FIXME
+        for data in animations[clip_name]:
+            track, path = data
+            path = path[len(anim_root) + 1:]
+            strip = track.strips[0]
+            for curve in strip.action.fcurves:
+                clip.curves.append(make_curve(mu, curve, path))
+        anim.clips.append(clip)
+    return anim
+
+def export_object(obj, filepath):
+    animations = collect_animations(obj)
+    anim_root = find_path_root(animations)
     mu = Mu()
+    mu.objects = {}
     mu.materials = {}
     mu.textures = {}
     mu.obj = make_obj(mu, obj)
@@ -352,5 +447,65 @@ def export_mu(operator, context, filepath):
     mu.materials.sort(key=lambda x: x.index)
     mu.textures = list(mu.textures.values())
     mu.textures.sort(key=lambda x: x.index)
+    if anim_root:
+        anim_root_obj = mu.objects[anim_root]
+        anim_root_obj.animation = make_animations(mu, animations, anim_root)
     mu.write(filepath)
+    return mu
+
+def export_mu(operator, context, filepath):
+    export_object (context.active_object, filepath)
     return {'FINISHED'}
+
+class ExportMu(bpy.types.Operator, ExportHelper):
+    '''Save a KSP Mu (.mu) File'''
+    bl_idname = "export_object.ksp_mu"
+    bl_label = "Export Mu"
+
+    filename_ext = ".mu"
+    filter_glob = StringProperty(default="*.mu", options={'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object != None
+                and (not context.active_object.data
+                     or type(context.active_object.data) == bpy.types.Mesh))
+
+    def execute(self, context):
+        keywords = self.as_keywords (ignore=("check_existing", "filter_glob"))
+        return export_mu(self, context, **keywords)
+
+class ExportMu_quick(bpy.types.Operator, ExportHelper):
+    '''Save a KSP Mu (.mu) File, defaulting name to selected object'''
+    bl_idname = "export_object.ksp_mu_quick"
+    bl_label = "Export Mu (quick)"
+
+    filename_ext = ".mu"
+    filter_glob = StringProperty(default="*.mu", options={'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        return (context.active_object != None
+                and (not context.active_object.data
+                     or type(context.active_object.data) == bpy.types.Mesh))
+
+    def execute(self, context):
+        keywords = self.as_keywords (ignore=("check_existing", "filter_glob"))
+        return export_mu(self, context, **keywords)
+
+    def invoke(self, context, event):
+        if context.active_object != None:
+            self.filepath = context.active_object.name + self.filename_ext
+        return ExportHelper.invoke(self, context, event)
+
+class VIEW3D_PT_tools_mu_export(bpy.types.Panel):
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'TOOLS'
+    bl_category = "Mu Tools"
+    bl_context = "objectmode"
+    bl_label = "Export Mu"
+
+    def draw(self, context):
+        layout = self.layout
+        #col = layout.column(align=True)
+        layout.operator("export_object.ksp_mu_quick", text = "Export Mu Model");
